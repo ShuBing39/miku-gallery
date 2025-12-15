@@ -16,11 +16,11 @@
             @click="openLightbox(item.image_url)"
             title="点击查看高清大图"
           />
-          <div class="source-badge">✨ 官方/Piapro 数据源</div>
+          <div class="source-badge">✨ {{ item.is_fan_work ? '用户投稿' : '官方/Piapro' }} 数据源</div>
         </div>
         
         <div v-if="officialImages.length > 0" class="more-images-box">
-          <h3 class="mini-title">👀 更多官方预览</h3>
+          <h3 class="mini-title">👀 更多预览</h3>
           <div class="mini-grid">
             <img 
               v-for="img in officialImages" 
@@ -32,8 +32,14 @@
           </div>
         </div>
 
+        <div v-if="item.video_url" class="video-section">
+          <a :href="item.video_url" target="_blank" class="video-btn">
+            ▶️ 点击观看视频 / PV
+          </a>
+        </div>
+
         <a :href="item.external_link || item.link" target="_blank" class="buy-btn">
-          🔗 前往官网查看/购买
+          🔗 前往详情/购买页面
         </a>
       </div>
 
@@ -41,6 +47,8 @@
         <h1 class="item-title">
           <span class="id-tag">#{{ item.id }}</span>
           {{ item.name }}
+          
+          <span v-if="item.is_fan_work" class="fan-badge">🎨 同人作品</span>
         </h1>
         
         <div class="tags-row">
@@ -48,11 +56,15 @@
           <span class="tag cat-tag">{{ item.category || '周边' }}</span>
         </div>
 
+        <div v-if="item.description" class="desc-box">
+          <p>{{ item.description }}</p>
+        </div>
+
         <div class="info-card">
           <div class="info-row">
-            <span class="label">💰 官方定价</span>
+            <span class="label">{{ item.is_fan_work ? '💰 作者定价' : '💰 官方定价' }}</span>
             <div class="price-group">
-              <span class="value original-price">{{ item.price }} JPY</span>
+              <span class="value original-price">{{ item.price ? item.price : '暂无' }} JPY</span>
               <span class="cny-hint" v-if="item.price">
                 (≈ {{ toCNY(item.price) }} CNY)
               </span>
@@ -94,12 +106,8 @@
               
               <div class="action-area-col">
                 <div v-if="item.market_price" class="proof-links">
-                  <a v-if="item.market_price_link" :href="item.market_price_link" target="_blank" class="proof-btn link" title="查看来源链接">
-                    🔗 来源链接
-                  </a>
-                  <button v-if="item.market_price_proof_image" @click="openLightbox(item.market_price_proof_image)" class="proof-btn image" title="查看凭证截图">
-                    🖼️ 凭证截图
-                  </button>
+                  <a v-if="item.market_price_link" :href="item.market_price_link" target="_blank" class="proof-btn link">🔗 链接</a>
+                  <button v-if="item.market_price_proof_image" @click="openLightbox(item.market_price_proof_image)" class="proof-btn image">🖼️ 截图</button>
                 </div>
 
                 <span v-if="isLocked" class="lock-timer">
@@ -122,13 +130,11 @@
           
           <div v-if="showPriceInput" class="price-input-box">
             <p class="input-hint">⚠️ 请提供真实成交价与凭证 (二选一)</p>
-            
             <div class="input-grid">
               <div class="input-field">
                 <label>价格 (JPY)</label>
                 <input type="number" min="0" v-model="newMarketPrice" placeholder="5000" class="mini-input">
               </div>
-              
               <div class="input-field">
                 <label>来源平台</label>
                 <select v-model="newPriceSource" class="mini-input">
@@ -140,23 +146,13 @@
                   <option value="线下店">线下店/展会</option>
                 </select>
               </div>
-              
-              <div class="input-field">
-                <label>你的昵称</label>
-                <input type="text" v-model="priceUploaderName" placeholder="用于展示" class="mini-input">
+              <div class="input-field full-width">
+                <input type="text" v-model="priceUploaderName" placeholder="你的昵称 (用于展示)" class="mini-input">
               </div>
             </div>
-
             <div class="proof-input-section">
               <label>凭证 (直达链接 或 截图)</label>
-              
-              <input 
-                type="text" 
-                v-model="newPriceLink" 
-                placeholder="https://... (商品详情页链接)" 
-                class="mini-input full-width"
-              >
-              
+              <input type="text" v-model="newPriceLink" placeholder="https://... (详情页链接)" class="mini-input full-width">
               <div class="file-upload-row">
                 <input type="file" ref="proofFileInput" @change="handleProofFile" accept="image/*" style="display:none" />
                 <button @click="$refs.proofFileInput.click()" class="mini-file-btn">
@@ -164,17 +160,13 @@
                 </button>
               </div>
             </div>
-
-            <div class="preview-price" v-if="newMarketPrice">
-              预览: {{ newMarketPrice }} JPY ≈ {{ toCNY(newMarketPrice) }} RMB
-            </div>
-
             <button @click="submitMarketPrice" class="mini-submit-btn">
               {{ isUploadingProof ? '正在上传凭证...' : '提交数据 (锁定7天)' }}
             </button>
           </div>
+
           <div class="info-row">
-            <span class="label">📅 发售日期</span>
+            <span class="label">📅 发售/发布</span>
             <span class="value">{{ item.release_date || '暂无数据' }}</span>
           </div>
           
@@ -183,76 +175,47 @@
             <span class="value author-name">{{ item.author }}</span>
           </div>
 
-          <div class="info-row">
-            <span class="label">📍 数据来源</span>
-            <span class="value">Piapro Blog</span>
+          <div v-if="isOwner" class="owner-actions">
+            <p>🎓 你是该作品的上传者</p>
+            <button @click="$router.push('/admin')" class="manage-btn">去后台编辑/管理</button>
           </div>
+
         </div>
 
         <div class="report-box">
           <p class="report-hint">发现信息有误？(引用 ID: {{ item.id }})</p>
-          <button @click="showReportForm = !showReportForm" class="report-btn">
-            ⚠️ 提交纠错 / 补充信息
-          </button>
-          
+          <button @click="showReportForm = !showReportForm" class="report-btn">⚠️ 提交纠错</button>
           <div v-if="showReportForm" class="report-form">
-            <textarea 
-              v-model="reportText" 
-              placeholder="请描述错误内容..."
-            ></textarea>
-            <button @click="submitReport" :disabled="isSubmitting">
-              {{ isSubmitting ? '提交中...' : '发送反馈' }}
-            </button>
+            <textarea v-model="reportText" placeholder="请描述错误内容..."></textarea>
+            <button @click="submitReport" :disabled="isSubmitting">{{ isSubmitting ? '提交中...' : '发送反馈' }}</button>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="divider">
-      <span class="divider-text">以下内容由用户共同维护</span>
-    </div>
+    <div class="divider"><span class="divider-text">以下内容由用户共同维护</span></div>
 
     <div class="user-gallery-section">
       <div class="gallery-header">
         <h2>📸 葱粉实物返图 ({{ userImages.length }})</h2>
-        <button @click="showUpload = !showUpload" class="upload-toggle-btn">
-          + 我也要晒图
-        </button>
+        <button @click="showUpload = !showUpload" class="upload-toggle-btn">+ 我也要晒图</button>
       </div>
-
       <div v-if="showUpload" class="upload-panel">
         <input type="text" v-model="uploaderName" placeholder="你的昵称 (可选)" class="name-input">
         <input type="file" ref="fileInput" @change="handleFileUpload" accept="image/*" style="display:none" />
-        <button @click="$refs.fileInput.click()" class="select-file-btn">
-          选择图片上传
-        </button>
+        <button @click="$refs.fileInput.click()" class="select-file-btn">选择图片上传</button>
         <p v-if="uploadStatus" class="status-text">{{ uploadStatus }}</p>
       </div>
-
       <div class="gallery-grid">
         <div v-for="img in userImages" :key="img.id" class="gallery-card">
           <div class="gallery-img-box">
-            <img 
-              :src="img.image_url" 
-              loading="lazy" 
-              class="zoom-cursor"
-              @click="openLightbox(img.image_url)"
-            />
+            <img :src="img.image_url" loading="lazy" class="zoom-cursor" @click="openLightbox(img.image_url)" />
           </div>
-          <div class="gallery-meta">
-            <span class="user-badge">👤 {{ img.uploader_name || '热心葱粉' }}</span>
-          </div>
+          <div class="gallery-meta"><span class="user-badge">👤 {{ img.uploader_name || '热心葱粉' }}</span></div>
         </div>
       </div>
-
-      <div v-if="userImages.length === 0" class="empty-state">
-        🍃 还没有人上传实物图，快来抢沙发！
-      </div>
+      <div v-if="userImages.length === 0" class="empty-state">🍃 还没有人上传实物图，快来抢沙发！</div>
     </div>
-
-    <footer class="detail-footer">
-      <p>本页面基础数据来源于官方，实物图片及纠错信息由社区用户共同维护。</p>
-    </footer>
 
     <transition name="fade">
       <div v-if="showLightbox" class="lightbox-overlay" @click="closeLightbox">
@@ -264,29 +227,25 @@
     </transition>
 
   </div>
-  
-  <div v-else class="loading-screen">
-    <div class="spinner"></div>
-    <p>正在读取档案...</p>
-  </div>
+  <div v-else class="loading-screen"><div class="spinner"></div><p>正在读取档案...</p></div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { createClient } from '@supabase/supabase-js'
 
 const route = useRoute()
+const router = useRouter()
 const itemId = route.params.id
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-const supabase = createClient(supabaseUrl, supabaseKey)
+const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY)
 
 // 数据
 const item = ref(null)
 const officialImages = ref([]) 
 const userImages = ref([])
+const currentUser = ref(null) // ✨ 当前用户
 
 // 交互
 const showReportForm = ref(false)
@@ -298,47 +257,39 @@ const isSubmitting = ref(false)
 const uploadStatus = ref('')
 const uploaderName = ref('')
 
-// ✨ 市价相关状态
+// 市价
 const showPriceInput = ref(false)
 const newMarketPrice = ref('')
 const newPriceSource = ref('')
-const newPriceLink = ref('') // 链接
+const newPriceLink = ref('')
 const priceUploaderName = ref('') 
 const isPriceRevealed = ref(false) 
-const proofFile = ref(null) // 凭证图片文件
+const proofFile = ref(null)
 const isUploadingProof = ref(false)
-
-// 💴 汇率状态 (默认保底 0.048)
 const exchangeRate = ref(0.048) 
 
-// 🔄 自动获取汇率
+// ✨ 判断是否为作者 (用于显示编辑按钮)
+const isOwner = computed(() => {
+  if (!currentUser.value || !item.value) return false
+  return item.value.uploader_id === currentUser.value.id
+})
+
+// 汇率
 const fetchExchangeRate = async () => {
   try {
-    // 使用免费的公开 API 获取 JPY -> CNY 汇率
     const res = await fetch('https://open.er-api.com/v6/latest/JPY')
     const data = await res.json()
-    if (data && data.rates && data.rates.CNY) {
-      exchangeRate.value = data.rates.CNY
-      console.log('💱 当前汇率已更新:', exchangeRate.value)
-    }
-  } catch (e) {
-    console.warn('❌ 汇率获取失败，使用默认值 0.048', e)
-  }
+    if (data?.rates?.CNY) exchangeRate.value = data.rates.CNY
+  } catch (e) { console.warn('汇率获取失败') }
 }
+const toCNY = (jpy) => jpy ? Math.floor(jpy * exchangeRate.value) : 0
 
-// 💰 汇率换算函数
-const toCNY = (jpy) => {
-  if (!jpy) return 0
-  return Math.floor(jpy * exchangeRate.value)
-}
-
-// ⏳ 锁定逻辑
+// 锁定逻辑
 const isLocked = computed(() => {
   if (!item.value || !item.value.market_price_updated_at) return false
   const lastUpdate = new Date(item.value.market_price_updated_at).getTime()
   return (Date.now() - lastUpdate) < (7 * 24 * 60 * 60 * 1000)
 })
-
 const daysRemaining = computed(() => {
   if (!item.value || !item.value.market_price_updated_at) return 0
   const diff = (7 * 24 * 60 * 60 * 1000) - (Date.now() - new Date(item.value.market_price_updated_at).getTime())
@@ -357,85 +308,52 @@ const formatDate = (isoString) => {
 }
 
 const revealPrice = () => { isPriceRevealed.value = true }
+const handleProofFile = (e) => { proofFile.value = e.target.files[0] }
 
-// 处理凭证文件选择
-const handleProofFile = (event) => {
-  proofFile.value = event.target.files[0]
-}
-
-// ✨ 提交市价 (含凭证上传)
+// 提交市价
 const submitMarketPrice = async () => {
   if (isLocked.value) { alert('⚠️ 价格冷却中！'); return }
   if (!newMarketPrice.value) { alert('请输入价格'); return }
-  
   const price = parseInt(newMarketPrice.value)
   if (isNaN(price) || price < 0) { alert('价格错误'); return }
   if (!newPriceSource.value) { alert('请选择来源'); return }
-  
-  // 校验: 链接和截图至少要有一个
-  if (!newPriceLink.value && !proofFile.value) {
-    alert('⚠️ 为了防止乱填，请提供【商品链接】或【截图】作为凭证！')
-    return
-  }
+  if (!newPriceLink.value && !proofFile.value) { alert('请提供链接或截图凭证'); return }
 
   isUploadingProof.value = true
   let proofImageUrl = null
 
-  // 1. 如果有图片，先上传
   if (proofFile.value) {
     const fileExt = proofFile.value.name.split('.').pop()
     const fileName = `proof-${itemId}-${Date.now()}.${fileExt}`
     const { error: upErr } = await supabase.storage.from('user_uploads').upload(fileName, proofFile.value)
-    
-    if (upErr) {
-      alert('凭证图片上传失败: ' + upErr.message)
-      isUploadingProof.value = false
-      return
+    if (!upErr) {
+      const { data } = supabase.storage.from('user_uploads').getPublicUrl(fileName)
+      proofImageUrl = data.publicUrl
     }
-    const { data } = supabase.storage.from('user_uploads').getPublicUrl(fileName)
-    proofImageUrl = data.publicUrl
   }
 
-  // 2. 更新数据库
-  const { error } = await supabase
-    .from('items')
-    .update({ 
+  const { error } = await supabase.from('items').update({ 
       market_price: price,
       market_price_updated_at: new Date().toISOString(),
       market_price_uploader: priceUploaderName.value || '匿名葱粉',
       market_price_source: newPriceSource.value,
-      market_price_link: newPriceLink.value || null, // 存链接
-      market_price_proof_image: proofImageUrl || null // 存截图
-    })
-    .eq('id', itemId)
+      market_price_link: newPriceLink.value || null,
+      market_price_proof_image: proofImageUrl || null
+    }).eq('id', itemId)
 
   isUploadingProof.value = false
-
   if (!error) {
-    alert('✅ 价格与凭证已提交！')
+    alert('✅ 市价已更新！')
     showPriceInput.value = false
-    newMarketPrice.value = ''
-    newPriceSource.value = ''
-    newPriceLink.value = ''
-    proofFile.value = null
+    newMarketPrice.value = ''; newPriceSource.value = ''; newPriceLink.value = ''; proofFile.value = null
     fetchItem() 
-  } else {
-    alert('提交失败: ' + error.message)
-  }
+  } else { alert('更新失败') }
 }
 
-// ...其他函数保持不变...
-const fetchOfficialImages = async () => {
-  const { data } = await supabase.from('item_images').select('*').eq('item_id', itemId)
-  if (data) officialImages.value = data
-}
-const fetchUserImages = async () => {
-  const { data } = await supabase.from('user_images').select('*').eq('item_id', itemId).order('created_at', { ascending: false })
-  if (data) userImages.value = data
-}
+const fetchOfficialImages = async () => { const { data } = await supabase.from('item_images').select('*').eq('item_id', itemId); if (data) officialImages.value = data }
+const fetchUserImages = async () => { const { data } = await supabase.from('user_images').select('*').eq('item_id', itemId).order('created_at', { ascending: false }); if (data) userImages.value = data }
 const handleFileUpload = async (event) => {
-  const file = event.target.files[0]
-  if (!file) return
+  const file = event.target.files[0]; if (!file) return
   uploadStatus.value = '正在上传...'
   const fileExt = file.name.split('.').pop()
   const fileName = `${itemId}-${Date.now()}.${fileExt}`
@@ -446,8 +364,7 @@ const handleFileUpload = async (event) => {
   if (!dbError) { uploadStatus.value = '上传成功！'; showUpload.value = false; fetchUserImages() }
 }
 const submitReport = async () => {
-  if (!reportText.value) return
-  isSubmitting.value = true
+  if (!reportText.value) return; isSubmitting.value = true
   const { error } = await supabase.from('error_reports').insert([{ item_id: itemId, description: reportText.value }])
   if (!error) { alert('✅ 反馈已提交！'); reportText.value = ''; showReportForm.value = false } 
   isSubmitting.value = false
@@ -456,16 +373,19 @@ const openLightbox = (url) => { lightboxImage.value = url; showLightbox.value = 
 const closeLightbox = () => { showLightbox.value = false; lightboxImage.value = ''; document.body.style.overflow = 'auto' }
 onUnmounted(() => { document.body.style.overflow = 'auto' })
 
-onMounted(() => {
-  fetchExchangeRate() // ✨ 挂载时拉取汇率
+onMounted(async () => {
+  fetchExchangeRate()
   fetchItem()
   fetchOfficialImages()
   fetchUserImages()
+  // ✨ 获取当前用户，用于判断是否为作者
+  const { data: { user } } = await supabase.auth.getUser()
+  currentUser.value = user
 })
 </script>
 
 <style scoped>
-/* 基础样式保持不变... */
+/* 基础样式保持不变，新增部分在下方 */
 .container { max-width: 1000px; margin: 0 auto; padding: 20px; padding-bottom: 80px; font-family: 'Helvetica Neue', Arial, sans-serif; color: #333; }
 .nav-bar { margin-bottom: 30px; }
 .back-link { text-decoration: none; color: #666; font-weight: 500; display: inline-flex; align-items: center; padding: 8px 16px; background: #f5f5f5; border-radius: 20px; transition: all 0.2s; }
@@ -500,57 +420,36 @@ onMounted(() => {
 .original-price { color: #333; font-weight: bold; }
 .cny-hint { font-size: 12px; color: #999; margin-left: 5px; font-weight: normal; }
 
-/* ✨✨✨ 市价模块 (V4.0) ✨✨✨ */
-.highlight-row { 
-  background: #fff8e1; 
-  margin: 0 -20px; 
-  padding: 15px 20px; 
-  border-top: 1px dashed #e0e0e0; 
-  border-bottom: 1px dashed #e0e0e0;
-  display: block; 
-}
+/* ✨✨✨ 新增样式 ✨✨✨ */
+.fan-badge { background: #ff9800; color: white; font-size: 12px; padding: 2px 6px; border-radius: 4px; margin-left: 10px; vertical-align: middle; }
+.video-section { margin-top: 15px; }
+.video-btn { display: block; width: 100%; text-align: center; background: #333; color: white; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px; box-sizing: border-box; }
+.video-btn:hover { background: #555; }
+.desc-box { background: #fffde7; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; line-height: 1.6; color: #555; white-space: pre-wrap; }
+.owner-actions { margin-top: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px; text-align: center; }
+.owner-actions p { margin: 0 0 10px 0; font-size: 12px; color: #1565c0; font-weight: bold; }
+.manage-btn { background: #1976d2; color: white; border: none; padding: 8px 20px; border-radius: 20px; cursor: pointer; font-weight: bold; font-size: 13px; }
+.manage-btn:hover { background: #1565c0; }
+
+/* 市价样式 */
+.highlight-row { background: #fff8e1; margin: 0 -20px; padding: 15px 20px; border-top: 1px dashed #e0e0e0; border-bottom: 1px dashed #e0e0e0; display: block; }
 .market-header { display: flex; justify-content: space-between; margin-bottom: 10px; align-items: flex-end; }
 .provider-info { font-size: 11px; color: #aaa; text-align: right; max-width: 60%; line-height: 1.2; }
 .market-content { display: flex; justify-content: space-between; align-items: flex-start; }
-
-/* 价格马赛克 */
-.price-display-box { 
-  position: relative;
-  background: #333; 
-  color: white; 
-  padding: 8px 15px; 
-  border-radius: 6px; 
-  cursor: pointer; 
-  user-select: none;
-  min-width: 140px;
-  text-align: center;
-}
-.price-display-box.blurred .main-price,
-.price-display-box.blurred .sub-price { filter: blur(6px); opacity: 0.5; }
-.blur-overlay {
-  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px; color: rgba(255,255,255,0.9); font-weight: bold;
-}
+.price-display-box { position: relative; background: #333; color: white; padding: 8px 15px; border-radius: 6px; cursor: pointer; user-select: none; min-width: 140px; text-align: center; }
+.price-display-box.blurred .main-price, .price-display-box.blurred .sub-price { filter: blur(6px); opacity: 0.5; }
+.blur-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 12px; color: rgba(255,255,255,0.9); font-weight: bold; }
 .price-display-box:not(.blurred) { background: white; border: 2px solid #ff9800; color: #ff5500; }
-
 .main-price { font-size: 20px; font-weight: 800; line-height: 1.1; }
 .sub-price { font-size: 11px; color: #999; font-weight: normal; margin-top: 2px; }
 .rate-badge { background: #eee; padding: 1px 4px; border-radius: 3px; margin-left: 4px; font-size: 10px; }
-
 .empty-price { color: #ccc; font-weight: normal; font-size: 14px; margin-top: 8px; }
 .update-time { font-size: 10px; color: #bbb; margin-top: 12px; text-align: right; }
-
 .action-area-col { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .proof-links { display: flex; gap: 5px; }
 .proof-btn { text-decoration: none; font-size: 11px; padding: 3px 8px; border-radius: 4px; border: 1px solid #ddd; background: white; color: #666; cursor: pointer; }
-.proof-btn:hover { border-color: #39C5BB; color: #39C5BB; }
-
 .lock-timer { font-size: 11px; color: #999; background: #eee; padding: 6px 10px; border-radius: 4px; }
 .edit-price-btn { border: 1px solid #ddd; background: white; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; color: #666; }
-.edit-price-btn:hover { color: #39C5BB; border-color: #39C5BB; }
-
-/* 表单区域 */
 .price-input-box { background: #fffde7; padding: 15px 20px; margin: 0 -20px; border-bottom: 1px dashed #e0e0e0; }
 .input-hint { font-size: 11px; color: #ff9800; margin: 0 0 10px 0; }
 .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
@@ -558,18 +457,13 @@ onMounted(() => {
 .input-field.full-width { grid-column: span 2; }
 .input-field label { font-size: 11px; color: #888; }
 .mini-input { padding: 8px; border: 1px solid #ddd; border-radius: 4px; outline: none; font-size: 13px; }
-.full-width { width: 100%; }
-.preview-price { font-size: 12px; color: #39C5BB; text-align: center; margin-bottom: 10px; font-weight: bold; }
 .mini-submit-btn { width: 100%; background: #39C5BB; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-.mini-submit-btn:hover { background: #2da8a0; }
-
 .proof-input-section { margin-bottom: 15px; border-top: 1px dashed #e0e0e0; padding-top: 10px; }
 .proof-input-section label { font-size: 11px; color: #888; display: block; margin-bottom: 5px; }
 .file-upload-row { margin-top: 8px; }
 .mini-file-btn { background: #eee; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; width: 100%; text-align: left; }
-.mini-file-btn:hover { background: #e0e0e0; }
 
-/* 其他样式保持... */
+/* 其他样式 */
 .report-box { margin-top: 30px; text-align: right; }
 .report-hint { display: inline-block; font-size: 12px; color: #999; margin-right: 10px; }
 .report-btn { background: none; border: 1px solid #ddd; color: #666; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
