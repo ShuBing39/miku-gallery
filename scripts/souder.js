@@ -1,57 +1,70 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv'; // 1. 引入 dotenv
 
-// ⚠️⚠️⚠️ 记得检查这里是不是填好了你的 URL 和 KEY ⚠️⚠️⚠️
-const SUPABASE_URL = 'https://rsktcmqaaycjxgwxgwxq.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJza3RjbXFhYXljanhnd3hnd3hxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTQ0MTQzNSwiZXhwIjoyMDgxMDE3NDM1fQ.oFLjppdU6euAvrWBjc1VLMIxoTcaI0aL7F-JDrMXaXc';
+// 2. 启动加载
+dotenv.config();
 
+// 3. 从环境变量里取值 (process.env.变量名)
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY; // 对应 .env 里的名字
+
+// ...后面的代码完全不用变...
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// 基础链接
 const BASE_URL = 'https://blog.piapro.net/category/goods';
-
-// 🛑 配置：你想抓多少页？(建议先设为 3 页测试一下)
 const MAX_PAGES = 3; 
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// 🧠 新增：鉴定师函数
+function analyzeTitle(title) {
+  let character = '其他角色'; // 默认值
+  let category = '一般周边';   // 默认值
+
+  // 1. 鉴定角色 (简单的关键词匹配)
+  if (title.includes('ミク')) character = '初音未来';
+  if (title.includes('リン') || title.includes('レン')) character = '镜音双子';
+  if (title.includes('ルカ')) character = '巡音流歌';
+  if (title.includes('MEIKO')) character = 'MEIKO';
+  if (title.includes('KAITO')) character = 'KAITO';
+  if (title.includes('ピアプロキャラクターズ')) character = '全员/混合';
+
+  // 2. 鉴定分类
+  if (title.includes('フィギュア') || title.includes('ねんどろいど')) category = '手办模型';
+  if (title.includes('ぬいぐるみ') || title.includes('マスコット')) category = '毛绒玩偶';
+  if (title.includes('アパレル') || title.includes('Tシャツ') || title.includes('パーカー')) category = '服饰穿搭';
+  if (title.includes('缶バッジ') || title.includes('キーホルダー') || title.includes('スタンド')) category = '小谷子(吧唧/立牌)';
+  if (title.includes('CD') || title.includes('DVD') || title.includes('楽曲')) category = '音乐/影音';
+  if (title.includes('お菓子') || title.includes('コラボカフェ')) category = '食品/联动餐饮';
+
+  return { character, category };
+}
+
 async function scrapeAllPages() {
-  console.log(`🚀 启动强力爬虫！准备抓取前 ${MAX_PAGES} 页数据...`);
+  console.log(`🚀 启动智能爬虫！准备抓取并自动分类...`);
 
-  // --- 外层循环：控制页码 (第1页 到 第N页) ---
   for (let page = 1; page <= MAX_PAGES; page++) {
-    
-    // 构造当前页面的 URL
-    let currentListUrl = BASE_URL;
-    if (page > 1) {
-      currentListUrl = `${BASE_URL}/page/${page}`;
-    }
-
-    console.log(`\n📄 [第 ${page} 页] 正在读取列表: ${currentListUrl}`);
+    let currentListUrl = page === 1 ? BASE_URL : `${BASE_URL}/page/${page}`;
+    console.log(`\n📄 [第 ${page} 页] 正在扫描: ${currentListUrl}`);
 
     try {
       const listResponse = await axios.get(currentListUrl);
       const $ = cheerio.load(listResponse.data);
       const links = [];
 
-      // 收集这一页的所有商品链接
       $('h1, h2, h3').find('a').each((i, el) => {
         const link = $(el).attr('href');
-        const text = $(el).text();
-        if (link && link.includes('blog.piapro.net') && text.trim().length > 5) {
+        if (link && link.includes('blog.piapro.net') && $(el).text().trim().length > 5) {
           if (!links.includes(link)) links.push(link);
         }
       });
 
-      console.log(`   👀 本页发现 ${links.length} 个商品，开始入库...`);
-
-      // --- 内层循环：处理这一页里的每个商品 ---
-      // (这里去掉了 maxItems 限制，既然要抓就全抓！)
       for (let i = 0; i < links.length; i++) {
         const detailUrl = links[i];
         
-        // 检查数据库里是不是已经有了？(防止重复抓取浪费时间)
+        // 检查是否存在
         const { data: existing } = await supabase
           .from('items')
           .select('id')
@@ -59,59 +72,51 @@ async function scrapeAllPages() {
           .single();
 
         if (existing) {
-          console.log(`   ⏭️ 跳过 (已存在): ${detailUrl.slice(-20)}`);
-          continue; // 跳过本次循环，直接下一个
+          process.stdout.write('.'); // 存在就打印个点，不刷屏
+          continue; 
         }
 
         try {
-          // 访问详情页
           const detailResponse = await axios.get(detailUrl);
           const $detail = cheerio.load(detailResponse.data);
 
           const title = $detail('.entry-title').text().trim();
           const image = $detail('.entry-content img').first().attr('src');
           
-          // 清洗价格
           const contentText = $detail('.entry-content').text();
           const priceMatch = contentText.match(/([0-9,]+)円/);
           let finalPrice = 0;
-          if (priceMatch) {
-              const rawPrice = priceMatch[1].replace(/,/g, ''); 
-              finalPrice = parseInt(rawPrice);
-          }
+          if (priceMatch) finalPrice = parseInt(priceMatch[1].replace(/,/g, ''));
 
-          // 入库
+          // 🧠 调用鉴定师，获取标签
+          const tags = analyzeTitle(title);
+
           const { error } = await supabase
               .from('items')
               .insert([{ 
                   name: title, 
                   price: finalPrice, 
                   image_url: image || null,
-                  link: detailUrl
+                  link: detailUrl,
+                  character: tags.character, // ✨ 存入新字段
+                  category: tags.category    // ✨ 存入新字段
               }]);
 
           if (!error) {
-              console.log(`   💾 [成功] ${title.substring(0, 15)}...`);
+              console.log(`\n   🏷️ [${tags.character} | ${tags.category}] ${title.substring(0, 15)}...`);
           }
 
         } catch (err) {
-          console.error('   ❌ 详情页抓取失败:', err.message);
+          console.error('   ❌ 抓取失败:', err.message);
         }
-
-        // 这里的 sleep 很重要！翻页抓取量大，不休息会被封号
         await sleep(1000); 
       }
-
     } catch (err) {
-      console.error(`❌ 第 ${page} 页列表读取失败:`, err.message);
+      console.error(`❌ 第 ${page} 页失败:`, err.message);
     }
-    
-    // 每翻一页，额外多休息 2 秒
-    console.log('🍵 翻页休息中...');
     await sleep(2000);
   }
-
-  console.log('\n🎉 所有页面抓取任务完成！');
+  console.log('\n🎉 任务完成！');
 }
 
 scrapeAllPages();
