@@ -5,21 +5,53 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY; 
+// 优先读取 Service Key (红钥匙)
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_KEY) {
+  console.error("❌ 错误：找不到 Key！请确认 .env 里有 SUPABASE_SERVICE_KEY");
+  process.exit(1);
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
 const BASE_URL = 'https://blog.piapro.net/category/goods';
-const MAX_PAGES = 999; 
+const MAX_PAGES = 10; // ⚠️ 为了精准修复，建议先跑 10 页看看效果
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-function analyzeTitle(title) {
-  let character = null; // 默认留空，不填“其他”
-  let category = null;
+// ✨ 新的核心技术：从网页文字里抠出日期
+// 目标格式： "2025年11月27日" -> "2025-11-27"
+function extractDateFromHTML(html) {
+  const $ = cheerio.load(html);
+  // 1. 尝试找 .entry-date 或 .published (标准博客结构)
+  let dateText = $('.entry-date').text() || $('.published').text() || $('.date').text();
+  
+  // 2. 如果找不到，就在全文里搜正则 (最暴力但也最有效)
+  if (!dateText) {
+    const bodyText = $('body').text();
+    // 匹配 "202x年xx月xx日"
+    const match = bodyText.match(/20\d{2}年\d{1,2}月\d{1,2}日/);
+    if (match) dateText = match[0];
+  }
 
-  // 1. 鉴定角色
+  if (dateText) {
+    // 把 "2025年11月27日" 转换成 "2025-11-27"
+    const match = dateText.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+    if (match) {
+      const year = match[1];
+      const month = match[2].padStart(2, '0'); // 补零: 9 -> 09
+      const day = match[3].padStart(2, '0');   // 补零: 5 -> 05
+      return `${year}-${month}-${day}`;
+    }
+  }
+  return null;
+}
+
+// 标签分析 (保持不变)
+function analyzeTitle(title) {
+  let character = null;
+  let category = null;
   if (title.includes('ミク')) character = '初音未来';
   if (title.includes('リン') || title.includes('レン')) character = '镜音双子';
   if (title.includes('ルカ')) character = '巡音流歌';
@@ -27,139 +59,106 @@ function analyzeTitle(title) {
   if (title.includes('KAITO')) character = 'KAITO';
   if (title.includes('ピアプロキャラクターズ')) character = '全员/混合';
 
-  // 2. 鉴定分类
   if (title.includes('フィギュア') || title.includes('ねんどろいど')) category = '手办模型';
-  if (title.includes('ぬいぐるみ') || title.includes('マスコット')) category = '毛绒玩偶';
-  if (title.includes('アパレル') || title.includes('Tシャツ') || title.includes('パーカー')) category = '服饰穿搭';
-  if (title.includes('缶バッジ') || title.includes('キーホルダー') || title.includes('スタンド')) category = '小谷子';
-  if (title.includes('CD') || title.includes('DVD') || title.includes('楽曲')) category = '音乐/影音';
-  if (title.includes('お菓子') || title.includes('コラボカフェ')) category = '食品/餐饮';
-
+  if (title.includes('ぬいぐるみ')) category = '毛绒玩偶';
+  if (title.includes('アパレル') || title.includes('Tシャツ')) category = '服饰穿搭';
+  if (title.includes('缶バッジ') || title.includes('キーホルダー')) category = '小谷子';
   return { character, category };
 }
 
-// ... 前面的 import 和 analyzeTitle 函数保持不变 ...
-
 async function scrapeAllPages() {
-  console.log(`🚀 启动超级爬虫 (伪装版)...`);
-
-  // ✨ 伪装成真实的浏览器 (非常重要！)
+  console.log(`🚀 启动【精准日期修复版】爬虫...`);
+  
   const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,ja;q=0.7',
-    'Referer': 'https://blog.piapro.net/' // 告诉它你是从它主页点进来的
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
   };
 
-  // ⚠️ 建议修改这里：上次停在16页，我们从第 15 页开始续爬，看看会发生什么
-  // 如果想爬完，可以把 endPage 设为 50 (先别设 999，太大了容易再次被封)
-  const startPage = 37; 
-  const endPage = 999;   
-
-  for (let page = startPage; page <= endPage; page++) {
+  for (let page = 1; page <= MAX_PAGES; page++) {
     let currentListUrl = page === 1 ? BASE_URL : `${BASE_URL}/page/${page}`;
-    console.log(`\n📄 [第 ${page} 页] 正在扫描: ${currentListUrl}`);
+    console.log(`\n📄 [第 ${page} 页] 正在读取列表...`);
 
     try {
-      // ✨ 这是一个更稳健的请求写法
       const listResponse = await axios.get(currentListUrl, { headers, timeout: 10000 });
-      
       const $ = cheerio.load(listResponse.data);
       const links = [];
 
-      // 获取链接
       $('h1, h2, h3').find('a').each((i, el) => {
         const link = $(el).attr('href');
-        if (link && link.includes('blog.piapro.net') && $(el).text().trim().length > 5) {
+        if (link && link.includes('blog.piapro.net')) {
           if (!links.includes(link)) links.push(link);
         }
       });
 
-      console.log(`   -> 本页发现 ${links.length} 个商品链接`);
-
-      // 如果这一页没找到链接，可能是因为被反爬了，或者页面结构变了
-      if (links.length === 0) {
-        console.warn(`   ⚠️ 警告：第 ${page} 页没有抓到任何链接！可能是被封 IP 了，或者是最后一页。`);
-        // 打印一下网页标题看看是不是 403 Forbidden
-        console.log(`   网页标题: ${$('title').text()}`);
-      }
+      console.log(`   found ${links.length} links.`);
 
       for (const detailUrl of links) {
-        try {
-          // 检查数据库
-          const { data: existing } = await supabase
-            .from('items')
-            .select('id')
-            .eq('link', detailUrl)
-            .single();
+        // 1. 检查数据库有没有这条数据
+        const { data: existing } = await supabase
+          .from('items')
+          .select('id, release_date')
+          .eq('link', detailUrl)
+          .single();
 
-          if (existing) {
-             process.stdout.write('↻'); 
-             continue; // 如果只为了抓新数据，这里可以直接跳过详细页请求
-          }
-
-          // 抓取详情页 (带 Headers)
-          const detailResponse = await axios.get(detailUrl, { headers, timeout: 10000 });
-          const $detail = cheerio.load(detailResponse.data);
-
-          const title = $detail('.entry-title').text().trim();
-          const image = $detail('.entry-content img').first().attr('src');
-          const contentText = $detail('.entry-content').text();
-          const priceMatch = contentText.match(/([0-9,]+)円/);
-          let finalPrice = 0;
-          if (priceMatch) finalPrice = parseInt(priceMatch[1].replace(/,/g, ''));
-
-          const tags = analyzeTitle(title);
-
-          // 插入数据
-          const { error } = await supabase
-              .from('items')
-              .insert([{ 
-                  name: title, 
-                  price: finalPrice, 
-                  image_url: image || null,
-                  link: detailUrl,
-                  character: tags.character, 
-                  category: tags.category    
-              }]);
-
-          if (error) {
-            // ✨ 详细打印数据库错误
-            console.error(`\n   ❌ 数据库拒绝写入: ${title}`);
-            console.error(`   原因: ${error.message}`);
-          } else {
-            console.log(`\n   ✨ 新增: [${tags.character}] ${title.substring(0, 15)}...`);
-          }
-
-        } catch (err) {
-          // ✨ 详细打印网络错误状态码
-          if (err.response) {
-            console.error(`   ❌ 请求失败 (HTTP ${err.response.status}): ${detailUrl}`);
-            if (err.response.status === 403 || err.response.status === 429) {
-              console.error(`   🚨 严重警告：你被网站屏蔽了！请立刻停止爬虫，休息 1 小时再试。`);
-              return; // 直接结束程序
-            }
-          } else {
-            console.error('   ❌ 未知错误:', err.message);
-          }
-        }
+        // 🛑 核心修改：不管数据库里有没有日期，我们都重新抓一次网页，获取最准确的日期
+        // 除非已经手动确认过 (为了节省时间，如果日期看起来很完美比如不是01号，也许可以跳过，但为了修复之前的错误，建议全部跑一遍)
         
-        // ⏱️ 增加随机延迟 (2秒 到 5秒 之间)，像人类一样阅读
-        const randomDelay = Math.floor(Math.random() * 3000) + 2000;
-        await sleep(randomDelay); 
+        try {
+            // 获取详情页 HTML
+            const detailResponse = await axios.get(detailUrl, { headers, timeout: 10000 });
+            
+            // ✨ 提取精准日期
+            const realDate = extractDateFromHTML(detailResponse.data);
+            
+            // 解析其他信息 (如果是新数据需要用到)
+            const $detail = cheerio.load(detailResponse.data);
+            const title = $detail('.entry-title').text().trim();
+            const image = $detail('.entry-content img').first().attr('src');
+            
+            // 价格提取
+            const contentText = $detail('.entry-content').text();
+            const priceMatch = contentText.match(/([0-9,]+)円/);
+            let finalPrice = 0;
+            if (priceMatch) finalPrice = parseInt(priceMatch[1].replace(/,/g, ''));
+            const tags = analyzeTitle(title);
+
+            // 🔄 分支 A: 更新旧数据
+            if (existing) {
+                // 如果抓到了新日期，并且 (旧日期不存在 OR 旧日期和新日期不一样)
+                if (realDate && existing.release_date !== realDate) {
+                    process.stdout.write(`   🛠️ 修正日期 ID:${existing.id}: ${existing.release_date || '无'} -> ${realDate} `);
+                    await supabase.from('items').update({ release_date: realDate }).eq('id', existing.id);
+                    console.log('✅');
+                } else {
+                    process.stdout.write('.'); // 日期一致，无需修改
+                }
+            } 
+            // 🆕 分支 B: 插入新数据
+            else {
+                process.stdout.write(`   🆕 新增: ${title.substring(0, 10)}... [${realDate}] `);
+                await supabase.from('items').insert([{ 
+                    name: title, 
+                    price: finalPrice, 
+                    image_url: image,
+                    link: detailUrl,
+                    character: tags.character, 
+                    category: tags.category,
+                    release_date: realDate // 存入精准日期
+                }]);
+                console.log('✨');
+            }
+
+            // 休息一下，因为我们要频繁请求详情页
+            await sleep(800); 
+
+        } catch (innerErr) {
+            console.log(`   ❌ 读取详情失败: ${detailUrl} - ${innerErr.message}`);
+        }
       }
     } catch (err) {
-      console.error(`❌ 第 ${page} 页列表抓取失败:`, err.message);
-      if (err.response && (err.response.status === 403 || err.response.status === 429)) {
-         console.error(`🚨 列表页被屏蔽，程序终止。`);
-         return;
-      }
+      console.error(`❌ 列表页失败: ${err.message}`);
     }
-    
-    // 翻页休息时间加长
-    await sleep(5000);
   }
-  console.log('\n🎉 任务完成！');
+  console.log('\n🎉 修复完成！');
 }
 
 scrapeAllPages();
