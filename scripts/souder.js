@@ -5,7 +5,6 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// 优先读取 Service Key (红钥匙)
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
@@ -16,58 +15,144 @@ if (!SUPABASE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const BASE_URL = 'https://blog.piapro.net/category/goods';
-const MAX_PAGES = 10; // ⚠️ 为了精准修复，建议先跑 10 页看看效果
+const MAX_PAGES = 500; 
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// ✨ 新的核心技术：从网页文字里抠出日期
-// 目标格式： "2025年11月27日" -> "2025-11-27"
 function extractDateFromHTML(html) {
   const $ = cheerio.load(html);
-  // 1. 尝试找 .entry-date 或 .published (标准博客结构)
   let dateText = $('.entry-date').text() || $('.published').text() || $('.date').text();
-  
-  // 2. 如果找不到，就在全文里搜正则 (最暴力但也最有效)
   if (!dateText) {
     const bodyText = $('body').text();
-    // 匹配 "202x年xx月xx日"
     const match = bodyText.match(/20\d{2}年\d{1,2}月\d{1,2}日/);
     if (match) dateText = match[0];
   }
-
   if (dateText) {
-    // 把 "2025年11月27日" 转换成 "2025-11-27"
     const match = dateText.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
     if (match) {
-      const year = match[1];
-      const month = match[2].padStart(2, '0'); // 补零: 9 -> 09
-      const day = match[3].padStart(2, '0');   // 补零: 5 -> 05
-      return `${year}-${month}-${day}`;
+      return `${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`;
     }
   }
   return null;
 }
 
-// 标签分析 (保持不变)
-function analyzeTitle(title) {
-  let character = null;
-  let category = null;
-  if (title.includes('ミク')) character = '初音未来';
-  if (title.includes('リン') || title.includes('レン')) character = '镜音双子';
-  if (title.includes('ルカ')) character = '巡音流歌';
-  if (title.includes('MEIKO')) character = 'MEIKO';
-  if (title.includes('KAITO')) character = 'KAITO';
-  if (title.includes('ピアプロキャラクターズ')) character = '全员/混合';
+// 🕵️‍♂️ 角色探测器 (保持不变)
+function findCharactersInText(text) {
+  const found = new Set();
+  const lower = text.toLowerCase();
+  
+  if (text.includes('ミク') || text.includes('初音') || lower.includes('miku') || text.includes('葱') || text.includes('ネギ') || text.includes('39')) found.add('初音未来');
 
-  if (title.includes('フィギュア') || title.includes('ねんどろいど')) category = '手办模型';
-  if (title.includes('ぬいぐるみ')) category = '毛绒玩偶';
-  if (title.includes('アパレル') || title.includes('Tシャツ')) category = '服饰穿搭';
-  if (title.includes('缶バッジ') || title.includes('キーホルダー')) category = '小谷子';
-  return { character, category };
+  const rinFalsePositives = ['ドリンク', 'プリン', 'キーリング', 'スプリング', 'ペアリング', 'イヤリング'];
+  let hasRin = text.includes('リン') || text.includes('鏡音') || lower.includes('rin') || text.includes('橘') || text.includes('ミカン') || text.includes('鈴');
+  if (hasRin && !text.includes('鏡音') && !lower.includes('rin')) {
+    let cleanText = text;
+    rinFalsePositives.forEach(bad => cleanText = cleanText.split(bad).join(''));
+    if (!cleanText.includes('リン') && !cleanText.includes('橘') && !cleanText.includes('ミカン') && !cleanText.includes('鈴')) hasRin = false;
+  }
+  if (hasRin) found.add('镜音铃');
+
+  const lenFalsePositives = ['カレンダー', 'アレンジ', 'チャレンジ', 'オレンジ', 'フレンチ'];
+  let hasLen = text.includes('レン') || text.includes('鏡音') || lower.includes('len') || text.includes('蕉') || text.includes('バナナ') || text.includes('連');
+  if (hasLen && !text.includes('鏡音') && !lower.includes('len')) {
+    let cleanText = text;
+    lenFalsePositives.forEach(bad => cleanText = cleanText.split(bad).join(''));
+    if (!cleanText.includes('レン') && !cleanText.includes('蕉') && !cleanText.includes('バナナ') && !cleanText.includes('連')) hasLen = false;
+  }
+  if (hasLen) found.add('镜音连');
+
+  const lukaFalsePositives = ['グッドスマイルカンパニー', 'イルカ', 'メタルカ'];
+  let hasLuka = text.includes('ルカ') || text.includes('巡音') || lower.includes('luka') || text.includes('章鱼') || text.includes('タコ');
+  if (hasLuka && !text.includes('巡音') && !lower.includes('luka')) {
+     let cleanText = text;
+     lukaFalsePositives.forEach(bad => cleanText = cleanText.split(bad).join(''));
+     if (!cleanText.includes('ルカ') && !cleanText.includes('タコ')) hasLuka = false;
+  }
+  if (hasLuka) found.add('巡音流歌');
+
+  if (text.includes('MEIKO') || text.includes('メイコ') || lower.includes('meiko') || text.includes('大姐') || text.includes('姉さん') || text.includes('酒')) found.add('MEIKO');
+
+  if (text.includes('KAITO') || text.includes('カイト') || lower.includes('kaito') || text.includes('大哥') || text.includes('兄さん') || text.includes('冰') || text.includes('アイス')) found.add('KAITO');
+  
+  return found;
+}
+
+// 🎨 画师提取 (保持不变)
+function extractAuthors(text) {
+  const authors = new Set();
+  const cleanText = text.replace(/<[^>]*>/g, ''); 
+  const regexList = [/Art by\s+([^\s,。、]+)/i, /illustration by\s+([^\s,。、]+)/i, /イラスト(?:：|:)\s*([^\s,。、]+)/];
+  regexList.forEach(regex => { const match = cleanText.match(regex); if (match && match[1]) authors.add(match[1]); });
+  if (cleanText.includes('描き') || cleanText.includes('原案') || cleanText.includes('イラスト') || cleanText.includes('デザイン') || cleanText.includes('ビジュアル')) {
+    const matches = cleanText.matchAll(/([^\s,。、「」『』()（）]+)(?:さん|氏)/g);
+    for (const match of matches) { const name = match[1]; if (name.length > 1 && name !== 'みな' && name !== '皆') authors.add(name); }
+  }
+  if (authors.size === 0) return null;
+  return Array.from(authors).join(' / ');
+}
+
+// ✨ 核心逻辑 v6.0：细分分类识别
+function analyzeMetadata($, title) {
+  const images = [];
+  $('.entry-content img').each((i, el) => {
+    const src = $(el).attr('src');
+    if (src && !src.includes('avatar') && !src.includes('icon') && !src.includes('banner')) images.push(src);
+  });
+
+  let externalLink = null;
+  $('.entry-content a').each((i, el) => {
+    const text = $(el).text();
+    const href = $(el).attr('href');
+    if (href && !href.includes('piapro.net') && (text.includes('こちら') || text.includes('サイト') || text.includes('予約') || text.includes('Web'))) externalLink = href;
+  });
+
+  const tags = [];
+  $('.tag-links a').each((i, el) => tags.push($(el).text()));
+  $('.cat-links a').each((i, el) => tags.push($(el).text()));
+  const tagString = tags.join(' ');
+  const fullText = `${title} ${tagString}`; 
+
+  // 4. 角色判决
+  let character = '其他/混合';
+  let titleChars = findCharactersInText(title);
+  if (titleChars.size === 0) titleChars = findCharactersInText(tagString);
+  if (titleChars.size === 1) character = Array.from(titleChars)[0];
+  else if (titleChars.size === 2) {
+    const hasRin = titleChars.has('镜音铃');
+    const hasLen = titleChars.has('镜音连');
+    if (hasRin && hasLen) character = '镜音双子'; 
+    else character = '全员/混合'; 
+  } else if (titleChars.size > 2) character = '全员/混合';
+  else {
+    if (tagString.includes('ピアプロキャラクターズ') || tagString.includes('全員')) character = '全员/混合';
+    else character = '初音未来'; 
+  }
+
+  // 📦 5. 分类识别 (细分版)
+  let category = '其他周边'; 
+  
+  if (fullText.includes('フィギュア') || fullText.includes('ねんどろいど') || fullText.includes('スケール') || fullText.includes('ドール')) category = '手办模型';
+  else if (fullText.includes('ぬいぐるみ') || fullText.includes('マスコット') || fullText.includes('ふかふか') || fullText.includes('どでかジャンボ') || fullText.includes('寝そべり')) category = '毛绒玩偶';
+  else if (fullText.includes('Tシャツ') || fullText.includes('パーカー') || fullText.includes('ファッション') || fullText.includes('リュック') || fullText.includes('法被') || fullText.includes('スニーカー')) category = '服饰穿搭';
+  else if (fullText.includes('CD') || fullText.includes('アルバム') || fullText.includes('楽曲') || fullText.includes('ソング')) category = '音乐/CD';
+  else if (fullText.includes('画集') || fullText.includes('ビジュアル') || fullText.includes('ブック')) category = '书籍/画册';
+  else if (fullText.includes('イベント') || fullText.includes('ライブ') || fullText.includes('マジカルミライ') || fullText.includes('SNOW MIKU')) category = '线下活动';
+  // ✨ 新增细分分类
+  else if (fullText.includes('缶バッジ') || fullText.includes('ピンズ')) category = '徽章/吧唧';
+  else if (fullText.includes('ペンライト') || fullText.includes('サイリウム') || fullText.includes('応援')) category = '应援棒/灯';
+  else if (fullText.includes('お菓子') || fullText.includes('食品') || fullText.includes('カレー') || fullText.includes('ラーメン') || fullText.includes('ドリンク') || fullText.includes('茶')) category = '食品/饮料';
+  // 兜底的小谷子
+  else if (fullText.includes('アクリル') || fullText.includes('キーホルダー') || fullText.includes('スタンド') || fullText.includes('クリアファイル') || fullText.includes('グッズ')) category = '小谷子/立牌';
+  else if (fullText.includes('ゲーム') || fullText.includes('コラボ')) category = '游戏联动';
+
+  const bodyText = $('.entry-content').text();
+  const author = extractAuthors(bodyText);
+
+  return { images, externalLink, character, category, author };
 }
 
 async function scrapeAllPages() {
-  console.log(`🚀 启动【精准日期修复版】爬虫...`);
+  console.log(`🚀 启动【V6.0 细分分类版】爬虫...`);
   
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -75,90 +160,61 @@ async function scrapeAllPages() {
 
   for (let page = 1; page <= MAX_PAGES; page++) {
     let currentListUrl = page === 1 ? BASE_URL : `${BASE_URL}/page/${page}`;
-    console.log(`\n📄 [第 ${page} 页] 正在读取列表...`);
+    console.log(`\n📄 [第 ${page} 页] 扫描列表...`);
 
     try {
-      const listResponse = await axios.get(currentListUrl, { headers, timeout: 10000 });
-      const $ = cheerio.load(listResponse.data);
+      const listResponse = await axios.get(currentListUrl, { headers });
+      const $list = cheerio.load(listResponse.data);
       const links = [];
 
-      $('h1, h2, h3').find('a').each((i, el) => {
-        const link = $(el).attr('href');
+      $list('h1, h2, h3').find('a').each((i, el) => {
+        const link = $list(el).attr('href');
         if (link && link.includes('blog.piapro.net')) {
           if (!links.includes(link)) links.push(link);
         }
       });
 
-      console.log(`   found ${links.length} links.`);
-
       for (const detailUrl of links) {
-        // 1. 检查数据库有没有这条数据
-        const { data: existing } = await supabase
-          .from('items')
-          .select('id, release_date')
-          .eq('link', detailUrl)
-          .single();
-
-        // 🛑 核心修改：不管数据库里有没有日期，我们都重新抓一次网页，获取最准确的日期
-        // 除非已经手动确认过 (为了节省时间，如果日期看起来很完美比如不是01号，也许可以跳过，但为了修复之前的错误，建议全部跑一遍)
-        
+        const { data: existing } = await supabase.from('items').select('id, release_date').eq('link', detailUrl).single();
         try {
-            // 获取详情页 HTML
-            const detailResponse = await axios.get(detailUrl, { headers, timeout: 10000 });
-            
-            // ✨ 提取精准日期
-            const realDate = extractDateFromHTML(detailResponse.data);
-            
-            // 解析其他信息 (如果是新数据需要用到)
-            const $detail = cheerio.load(detailResponse.data);
-            const title = $detail('.entry-title').text().trim();
-            const image = $detail('.entry-content img').first().attr('src');
-            
-            // 价格提取
-            const contentText = $detail('.entry-content').text();
-            const priceMatch = contentText.match(/([0-9,]+)円/);
-            let finalPrice = 0;
-            if (priceMatch) finalPrice = parseInt(priceMatch[1].replace(/,/g, ''));
-            const tags = analyzeTitle(title);
+          const detailResponse = await axios.get(detailUrl, { headers });
+          const $ = cheerio.load(detailResponse.data);
+          const title = $('.entry-title').text().trim();
+          const releaseDate = extractDateFromHTML(detailResponse.data);
+          const { images, externalLink, character, category, author } = analyzeMetadata($, title);
+          const mainImage = images.length > 0 ? images[0] : null; 
+          const extraImages = images.slice(1); 
+          const contentText = $('.entry-content').text();
+          const priceMatch = contentText.match(/([0-9,]+)円/);
+          let finalPrice = 0;
+          if (priceMatch) finalPrice = parseInt(priceMatch[1].replace(/,/g, ''));
 
-            // 🔄 分支 A: 更新旧数据
-            if (existing) {
-                // 如果抓到了新日期，并且 (旧日期不存在 OR 旧日期和新日期不一样)
-                if (realDate && existing.release_date !== realDate) {
-                    process.stdout.write(`   🛠️ 修正日期 ID:${existing.id}: ${existing.release_date || '无'} -> ${realDate} `);
-                    await supabase.from('items').update({ release_date: realDate }).eq('id', existing.id);
-                    console.log('✅');
-                } else {
-                    process.stdout.write('.'); // 日期一致，无需修改
-                }
-            } 
-            // 🆕 分支 B: 插入新数据
-            else {
-                process.stdout.write(`   🆕 新增: ${title.substring(0, 10)}... [${realDate}] `);
-                await supabase.from('items').insert([{ 
-                    name: title, 
-                    price: finalPrice, 
-                    image_url: image,
-                    link: detailUrl,
-                    character: tags.character, 
-                    category: tags.category,
-                    release_date: realDate // 存入精准日期
-                }]);
-                console.log('✨');
-            }
-
-            // 休息一下，因为我们要频繁请求详情页
-            await sleep(800); 
-
-        } catch (innerErr) {
-            console.log(`   ❌ 读取详情失败: ${detailUrl} - ${innerErr.message}`);
-        }
+          let itemId = null;
+          if (existing) {
+             process.stdout.write(`   🔄 修正 ID:${existing.id} [${category}]... `);
+             await supabase.from('items').update({ 
+               character, category, author, release_date: releaseDate || existing.release_date, external_link: externalLink
+             }).eq('id', existing.id);
+             itemId = existing.id;
+          } else {
+             process.stdout.write(`   🆕 新增 [${category}]... `);
+             const { data: newItem, error } = await supabase.from('items').insert([{ 
+                 name: title, price: finalPrice, image_url: mainImage, link: detailUrl, external_link: externalLink,
+                 character: character, category: category, author: author, release_date: releaseDate
+             }]).select();
+             if (!error && newItem) itemId = newItem[0].id;
+          }
+          if (itemId && extraImages.length > 0) {
+            await supabase.from('item_images').delete().eq('item_id', itemId);
+            const imageInserts = extraImages.map(url => ({ item_id: itemId, image_url: url }));
+            await supabase.from('item_images').insert(imageInserts);
+            process.stdout.write(`+${extraImages.length}图 `);
+          }
+          console.log('✅');
+          await sleep(200); 
+        } catch (innerErr) { console.log(`❌ Err: ${innerErr.message}`); }
       }
-    } catch (err) {
-      console.error(`❌ 列表页失败: ${err.message}`);
-    }
+    } catch (err) { console.error(`❌ 列表页失败: ${err.message}`); }
   }
-  console.log('\n🎉 修复完成！');
 }
-
 scrapeAllPages();
