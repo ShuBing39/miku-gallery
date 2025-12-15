@@ -1,0 +1,36 @@
+name: Daily Miku Crawler 🎵
+
+# 设定触发条件
+on:
+  # 1. 定时触发：每天国际标准时间 00:00 (北京/日本时间早上 08:00 或 09:00)
+  schedule:
+    - cron: '0 0 * * *'
+  # 2. 手动触发：允许你在 GitHub 网页上点按钮手动运行
+  workflow_dispatch:
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest # 使用 GitHub 提供的免费 Linux 电脑
+
+    steps:
+      # 第一步：把代码下载到机器人电脑上
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 第二步：安装 Node.js 环境
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      # 第三步：安装依赖 (axios, cheerio, supabase...)
+      - name: Install dependencies
+        run: npm install
+
+      # 第四步：运行爬虫脚本
+      - name: Run Crawler
+        # 这里的 env 是关键，把刚才存的 Secrets 注入给脚本
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/souder.js
