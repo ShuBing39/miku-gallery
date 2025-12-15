@@ -6,7 +6,7 @@
       <input 
         v-model="searchQuery" 
         type="text" 
-        placeholder="🔍 输入关键词搜索（如：雪ミク、2025...）"
+        placeholder="🔍 试着搜：手办、KAITO、2025..."
         class="search-input"
       >
       <span class="result-count">找到 {{ filteredItems.length }} 个宝贝</span>
@@ -23,6 +23,15 @@
         <img :src="item.image_url" class="card-image" loading="lazy" />
         
         <div class="card-info">
+          <div class="tags">
+            <span v-if="item.character" class="tag char-tag">
+              {{ item.character }}
+            </span>
+            <span v-if="item.category" class="tag cat-tag">
+              {{ item.category }}
+            </span>
+          </div>
+
           <h3 class="card-title">{{ item.name }}</h3>
           <p class="price">¥{{ item.price }}</p>
         </div>
@@ -36,36 +45,39 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue' // ✨ 引入 computed
+import { ref, onMounted, computed } from 'vue'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = 'https://rsktcmqaaycjxgwxgwxq.supabase.co'
-// 为了方便，Key 继续放这里（虽然不完美但能用）
+// ⚠️ 记得这里是你刚才更新过的新的 Anon Key
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJza3RjbXFhYXljanhnd3hnd3hxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU0NDE0MzUsImV4cCI6MjA4MTAxNzQzNX0.qw1KfL-ZOnwhhWQ0JYGuCLBAh4vTTi61B2ynpf5wv1g'
 
 const supabase = createClient(supabaseUrl, supabaseKey)
 
-const items = ref([])       // 存放所有数据
-const searchQuery = ref('') // ✨ 存放用户输入的搜索词
+const items = ref([])
+const searchQuery = ref('')
 
-// ✨ 核心魔法：计算属性
-// 只要 searchQuery 变了，这个结果会自动重新计算
 const filteredItems = computed(() => {
-  // 如果搜索框是空的，就返回所有
   if (!searchQuery.value) return items.value
   
-  // 否则，筛选出名字里包含搜索词的商品
   const lowerQuery = searchQuery.value.toLowerCase()
-  return items.value.filter(item => 
-    item.name && item.name.toLowerCase().includes(lowerQuery)
-  )
+  
+  // ✨ 升级搜索逻辑：同时搜索 标题、角色、分类
+  return items.value.filter(item => {
+    // 防止某些字段是空的导致报错，加个 || '' 保护
+    const nameMatch = (item.name || '').toLowerCase().includes(lowerQuery)
+    const charMatch = (item.character || '').toLowerCase().includes(lowerQuery)
+    const catMatch = (item.category || '').toLowerCase().includes(lowerQuery)
+    
+    return nameMatch || charMatch || catMatch
+  })
 })
 
 onMounted(async () => {
+  // ✨ 升级查询：多查两个字段 character, category
   const { data, error } = await supabase
     .from('items')
-    .select('id, name, price, image_url, link')
-    // 按 ID 倒序排列，新的在前面
+    .select('id, name, price, image_url, link, character, category')
     .order('id', { ascending: false }) 
     
   if (data) {
@@ -90,7 +102,6 @@ onMounted(async () => {
   margin-bottom: 30px;
 }
 
-/* ✨ 搜索框样式 */
 .search-box {
   display: flex;
   justify-content: center;
@@ -105,14 +116,14 @@ onMounted(async () => {
   max-width: 400px;
   padding: 12px 20px;
   border: 2px solid #eee;
-  border-radius: 50px; /* 圆溜溜的搜索框 */
+  border-radius: 50px;
   font-size: 16px;
   outline: none;
   transition: all 0.3s;
 }
 
 .search-input:focus {
-  border-color: #39C5BB; /* 聚焦时变初音绿 */
+  border-color: #39C5BB;
   box-shadow: 0 0 8px rgba(57, 197, 187, 0.3);
 }
 
@@ -150,7 +161,7 @@ onMounted(async () => {
 
 .card:hover {
   transform: translateY(-5px);
-  box-shadow: 0 15px 30px rgba(57, 197, 187, 0.15); /* 悬停时带点绿色的光晕 */
+  box-shadow: 0 15px 30px rgba(57, 197, 187, 0.15);
   border-color: #39C5BB;
 }
 
@@ -160,7 +171,7 @@ onMounted(async () => {
   object-fit: contain;
   display: block;
   background-color: #f8f9fa;
-  padding: 10px; /* 给图片一点呼吸空间 */
+  padding: 10px;
 }
 
 .card-info {
@@ -172,12 +183,36 @@ onMounted(async () => {
   background: white;
 }
 
+/* ✨ 新增标签样式 */
+.tags {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 8px; /* 标签和标题之间留点空隙 */
+  flex-wrap: wrap;
+}
+
+.tag {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.char-tag {
+  background-color: #e0f7fa;
+  color: #006064; /* 深青色 */
+}
+
+.cat-tag {
+  background-color: #f3e5f5;
+  color: #4a148c; /* 深紫色 */
+}
+
 .card-title {
   margin: 0 0 10px 0;
   font-size: 1rem;
   line-height: 1.5;
   color: #333;
-  
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -186,10 +221,10 @@ onMounted(async () => {
 }
 
 .price {
-  color: #ff5588; /* 换个更醒目的粉色 */
+  color: #ff5588;
   font-weight: 800;
   font-size: 1.2rem;
   margin: 0;
-  text-align: right; /* 价格靠右放 */
+  text-align: right;
 }
 </style>
