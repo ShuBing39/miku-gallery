@@ -10,10 +10,13 @@
         <router-link to="/login">登录</router-link>
         <span class="divider">|</span>
         <router-link to="/register">申请内测</router-link>
+        <router-link to="/circle" class="profile-link" style="margin-right: 5px; background: #fff3e0; color: #e65100;">
+  🏯 我的社团
+</router-link>
       </div>
     </div>
 
-    <h1 class="site-title">初音未来周边编年史</h1>
+    <h1 class="site-title">葱葱维基</h1>
     
     <div class="toolbar">
       <div class="search-box">
@@ -45,12 +48,16 @@
       <div class="result-count">🔍 找到 {{ items.length }} 个结果</div>
       <div v-if="items.length > 0" class="grid">
         <router-link v-for="item in items" :key="item.id" :to="'/item/' + item.id" class="card">
-          <span class="id-badge">#{{ item.id }}</span>
-          <img :src="item.image_url" class="card-image" loading="lazy" />
+          <div class="card-img-box">
+            <span class="id-badge">#{{ item.id }}</span>
+            <img :src="item.image_url" class="card-image" loading="lazy" />
+            <span v-if="item.is_fan_work" class="fan-tag">🎨 同人作品</span>
+          </div>
+
           <div class="card-info">
             <h3 class="card-title">{{ item.name }}</h3>
             <div class="card-footer">
-               <span class="price">¥{{ item.market_price || item.price }}</span>
+               <span class="price">¥{{ item.market_price || item.price || '??' }}</span>
                <span class="date-tag">{{ item.release_date || '未知' }}</span>
             </div>
           </div>
@@ -72,8 +79,12 @@
           <div v-if="group.isLoading" class="loading-state">⏳ 读取中...</div>
           <div v-else-if="group.items && group.items.length > 0" class="grid">
             <router-link v-for="item in group.items" :key="item.id" :to="'/item/' + item.id" class="card">
-              <span class="id-badge">#{{ item.id }}</span>
-              <img :src="item.image_url" class="card-image" loading="lazy" />
+              <div class="card-img-box">
+                <span class="id-badge">#{{ item.id }}</span>
+                <img :src="item.image_url" class="card-image" loading="lazy" />
+                <span v-if="item.is_fan_work" class="fan-tag">🎨 同人作品</span>
+              </div>
+
               <div class="card-info">
                 <div class="tags">
                    <span class="tag char-tag">{{ item.character }}</span>
@@ -95,9 +106,7 @@
       <button @click="loadMoreMonths" class="load-history-btn">📜 查看更早历史</button>
     </div>
 
-    <router-link to="/submit" class="fab-btn" title="发布新周边">
-      ➕
-    </router-link>
+    <router-link to="/submit" class="fab-btn" title="发布新周边">➕</router-link>
 
   </div>
 </template>
@@ -158,9 +167,9 @@ const fetchMonthData = async (index) => {
   const startStr = `${group.year}-${group.month}-01`
   const nextMonth = new Date(group.year, group.month, 1) 
   
-  // 只显示审核通过的
+  // ✨ 改动点：select里增加了 is_fan_work
   const { data } = await supabase.from('items')
-    .select('id, name, price, market_price, image_url, character, category, author, release_date')
+    .select('id, name, price, market_price, image_url, character, category, author, release_date, is_fan_work')
     .eq('status', 'approved')
     .gte('release_date', startStr)
     .lt('release_date', nextMonth.toISOString())
@@ -175,7 +184,8 @@ const applyQuickFilter = () => { if (quickFilter.value) { searchInput.value = qu
 const searchData = async () => {
   const rawQ = searchInput.value.trim()
   if (!rawQ) return
-  let query = supabase.from('items').select('id, name, price, market_price, image_url, character, category, author, release_date').eq('status', 'approved')
+  // ✨ 改动点：select里增加了 is_fan_work
+  let query = supabase.from('items').select('id, name, price, market_price, image_url, character, category, author, release_date, is_fan_work').eq('status', 'approved')
   const keywords = rawQ.split(/\s+/).filter(k => k.length > 0)
 
   keywords.forEach(key => {
@@ -206,22 +216,18 @@ const clearSearch = () => { searchInput.value = ''; items.value = []; }
 .user-info { display: flex; gap: 15px; align-items: center; }
 .profile-link { background: #e0f2f1; color: #00695c; padding: 4px 10px; border-radius: 12px; text-decoration: none; font-weight: bold; font-size: 12px; transition: 0.2s; }
 
-/* ✨ Toolbar 改造 */
 .toolbar { margin-bottom: 30px; display: flex; gap: 10px; align-items: center; }
 .search-box { flex: 1; position: relative; }
 .search-input { width: 100%; padding: 12px 15px; border: 2px solid #eee; border-radius: 8px; font-size: 14px; transition: 0.3s; box-sizing: border-box; }
 .search-input:focus { border-color: #39C5BB; outline: none; }
 .clear-btn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); border: none; background: none; color: #999; cursor: pointer; }
 .filter-select { padding: 0 10px; border: 2px solid #eee; border-radius: 8px; background: white; cursor: pointer; height: 44px; font-size: 13px; color: #555; width: 100px; }
-/* 新增按钮(工具栏) */
 .add-btn-toolbar { background: #39C5BB; color: white; padding: 0 20px; height: 44px; display: flex; align-items: center; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px; white-space: nowrap; box-shadow: 0 4px 10px rgba(57,197,187,0.3); transition: 0.2s; }
 .add-btn-toolbar:hover { background: #2da8a0; transform: translateY(-2px); }
 
-/* ✨ 悬浮按钮 (FAB) */
 .fab-btn { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; background: #39C5BB; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; text-decoration: none; font-size: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 100; transition: transform 0.2s; }
 .fab-btn:hover { transform: scale(1.1) rotate(90deg); background: #2da8a0; }
 
-/* 其他通用样式保持简洁 */
 .timeline-container { position: relative; border-left: 2px solid #e0e0e0; margin-left: 10px; padding-left: 30px; }
 .month-section { margin-bottom: 20px; }
 .month-header { position: relative; cursor: pointer; padding: 10px 0; display: flex; align-items: center; transition: all 0.2s; }
@@ -235,10 +241,31 @@ const clearSearch = () => { searchInput.value = ''; items.value = []; }
 .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
 @media (min-width: 640px) { .grid { grid-template-columns: repeat(3, 1fr); } }
 @media (min-width: 1024px) { .grid { grid-template-columns: repeat(5, 1fr); } }
+
 .card { background: white; border-radius: 10px; border: 1px solid #f0f0f0; overflow: hidden; text-decoration: none; color: inherit; position: relative; transition: transform 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
 .card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.08); border-color: #39C5BB; }
+
+/* ✨ 图片容器相关样式 */
+.card-img-box { position: relative; width: 100%; aspect-ratio: 1/1; background: #fff; padding: 10px; box-sizing: border-box; }
+.card-image { width: 100%; height: 100%; object-fit: contain; }
 .id-badge { position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,0.4); color: white; font-size: 10px; padding: 2px 5px; border-radius: 4px; z-index: 2; }
-.card-image { width: 100%; aspect-ratio: 1/1; object-fit: contain; padding: 10px; background: #fff; }
+
+/* ✨ 同人标签样式 */
+.fan-tag { 
+  position: absolute; 
+  top: 6px; 
+  left: 6px; 
+  background: rgba(255, 152, 0, 0.9); /* 橙色背景 */
+  color: white; 
+  font-size: 10px; 
+  padding: 3px 6px; 
+  border-radius: 4px; 
+  z-index: 2; 
+  font-weight: bold; 
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  backdrop-filter: blur(2px);
+}
+
 .card-info { padding: 10px; }
 .tags { margin-bottom: 5px; }
 .tag { font-size: 10px; padding: 2px 6px; background: #f0f0f0; border-radius: 4px; color: #666; }
