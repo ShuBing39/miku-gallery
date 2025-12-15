@@ -42,7 +42,7 @@
   const isAdmin = computed(() => {
     // 这里填你注册时的管理员邮箱，用于显示后台按钮
     // 实际权限由 Supabase RLS 保护，这里只是前端显示控制
-    return email.value === '你的管理员邮箱@example.com' 
+    return email.value === 'hatsunemiku39393@foxmail.com' 
   })
   
   const userInitial = computed(() => {
