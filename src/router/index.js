@@ -12,6 +12,7 @@ import RegisterView from '../views/RegisterView.vue'
 import AdminDashboard from '../views/AdminDashboard.vue'
 import UserDashboard from '../views/UserDashboard.vue'
 import SubmitWork from '../views/SubmitWork.vue'
+import EventsView from '../views/WikiView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -29,6 +30,7 @@ const router = createRouter({
     { path: '/profile', name: 'profile', component: UserDashboard, meta: { requiresAuth: true } },
     { path: '/admin', name: 'admin', component: AdminDashboard, meta: { requiresAuth: true } },
     { path: '/submit', name: 'submit', component: SubmitWork, meta: { requiresAuth: true } },
+    { path: '/events', name: 'events', component: () => import('../views/EventsView.vue') },
   ],
   scrollBehavior(to, from, savedPosition) {
     return savedPosition || { top: 0 }
