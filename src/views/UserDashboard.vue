@@ -1,15 +1,17 @@
 <template>
   <div class="dashboard-container">
     
-    <div v-if="fatalError" class="fatal-error-box">
-      <h3>⚠️ 发生错误</h3>
-      <p>{{ fatalError }}</p>
-      <button @click="reloadPage">刷新页面</button>
+    <div v-if="fatalError" class="error-boundary">
+      <div class="error-content">
+        <h3>⚠️ 页面遇到问题</h3>
+        <p>{{ fatalError }}</p>
+        <button @click="reloadPage" class="btn-refresh">重新加载</button>
+      </div>
     </div>
 
     <div v-else-if="initializing" class="full-screen-loading">
       <div class="spinner"></div>
-      <p>正在加载用户信息...</p>
+      <p>正在连接社团网络...</p>
     </div>
 
     <template v-else>
@@ -17,8 +19,8 @@
         <div class="avatar-section">
           <div class="avatar">{{ userInitial }}</div>
           <div class="info">
-            <h2>{{ currentUser?.user_metadata?.username || '用户' }}</h2>
-            <p class="email">{{ currentUser?.email || '无邮箱信息' }}</p>
+            <h2>{{ safeUsername }}</h2>
+            <p class="email">{{ currentUser?.email }}</p>
             <div class="tags">
               <span class="role-badge" v-if="isAdmin">⚡ 管理员</span>
               <span class="role-badge member" v-else>☁️ 普通成员</span>
@@ -283,11 +285,9 @@ const showApplyModal = ref(false)
 const selectedCircle = ref(null)
 const applyForm = ref({ nickname: '', contact: '', reason: '' })
 
-// 安全的计算属性 (修复白屏的关键点)
-const userInitial = computed(() => {
-  if (!currentUser.value?.email) return 'U'
-  return currentUser.value.email[0]?.toUpperCase() || 'U'
-})
+// 安全计算属性
+const userInitial = computed(() => currentUser.value?.email?.[0]?.toUpperCase() || 'U')
+const safeUsername = computed(() => currentUser.value?.user_metadata?.username || '用户')
 const isAdmin = computed(() => currentUser.value?.email === 'admin@39wikis.com')
 const isOwner = computed(() => myCircle.value && currentUser.value && myCircle.value.owner_id === currentUser.value.id)
 
@@ -295,8 +295,7 @@ onMounted(async () => {
   try {
     initializing.value = true 
     
-    // 1. 获取 URL 中的 invite 参数 (兼容性处理)
-    // 优先用 route.query，如果没有，尝试手动解析 location.search (防止VueRouter初始化慢)
+    // 1. 获取 URL 中的 invite 参数
     let inviteCode = route.query.invite
     if (!inviteCode) {
       const params = new URLSearchParams(window.location.search)
@@ -306,22 +305,21 @@ onMounted(async () => {
     // 2. 获取用户
     const { data: { user }, error } = await supabase.auth.getUser()
     
-    if (error) throw error
-
     // 3. 未登录处理
     if (!user) {
       if (inviteCode) {
+        // 保存邀请码到 Session，以便登录后恢复
         sessionStorage.setItem('pending_invite', inviteCode)
-        alert('该邀请链接有效，请先登录/注册后自动加入！')
       }
-      router.push('/login')
-      return // 中断执行，等待跳转
+      // 使用 replace 防止在历史记录中留下空白页，并跳转登录
+      router.replace('/login')
+      return 
     }
 
     // 4. 已登录，初始化数据
     currentUser.value = user
 
-    // 5. 处理邀请码 (缓存 > URL)
+    // 5. 检查是否有缓存的邀请码 (刚登录回来)
     const cachedInvite = sessionStorage.getItem('pending_invite')
     if (cachedInvite) {
       await verifyInvite(cachedInvite)
@@ -334,8 +332,8 @@ onMounted(async () => {
     await fetchAllData()
 
   } catch (e) {
-    console.error("Dashboard Crash:", e)
-    fatalError.value = "页面初始化失败: " + (e.message || "未知错误")
+    console.error("Critical Error:", e)
+    fatalError.value = "页面加载失败: " + (e.message || "未知错误")
   } finally {
     initializing.value = false
   }
@@ -368,20 +366,20 @@ const verifyInvite = async (inviteId) => {
     
     if (error) throw error
     if (!invite) { 
-      inviteError.value = '该链接无效或不存在'; inviteInfo.value = { dummy: true }; return 
+      inviteError.value = '链接无效'; inviteInfo.value = { dummy: true }; return 
     }
     if (new Date() > new Date(invite.expires_at)) { 
-      inviteError.value = '该邀请链接已过期失效'; inviteInfo.value = { dummy: true }; return 
+      inviteError.value = '链接已过期'; inviteInfo.value = { dummy: true }; return 
     }
     if (invite.used_count >= invite.max_uses) { 
-      inviteError.value = '该链接的使用次数已耗尽'; inviteInfo.value = { dummy: true }; return 
+      inviteError.value = '链接次数耗尽'; inviteInfo.value = { dummy: true }; return 
     }
     
     inviteInfo.value = invite; 
     inviteCircleName.value = invite.circles?.name
   } catch (e) {
-    console.error('Verify Invite Error:', e)
-    inviteError.value = '邀请码验证失败'; inviteInfo.value = { dummy: true }
+    console.error('Verify Error:', e)
+    inviteError.value = '验证失败'; inviteInfo.value = { dummy: true }
   }
 }
 
@@ -395,7 +393,7 @@ const fetchAllData = async () => {
     const { data: mem } = await supabase.from('circle_members').select('circle_id').eq('user_id', currentUser.value.id).maybeSingle()
     
     if (mem) {
-      inviteInfo.value = null // 已有社团，忽略邀请
+      inviteInfo.value = null // 已入社忽略邀请
       const { data: circle } = await supabase.from('circles').select('*').eq('id', mem.circle_id).single()
       if (circle) {
         myCircle.value = circle
@@ -413,8 +411,7 @@ const fetchAllData = async () => {
       }
     }
   } catch (e) {
-    console.error("Data Load Error:", e)
-    // 这里不抛出致命错误，允许显示部分UI
+    console.error("Fetch Data Error:", e)
   } finally {
     loadingCircle.value = false
   }
@@ -437,6 +434,7 @@ const createCircle = async () => {
   try {
     const { data: c, error } = await supabase.from('circles').insert([{ name: newCircleName.value, owner_id: currentUser.value.id, is_public: newCirclePublic.value }]).select().single()
     if (error) throw error
+    // 团长自己加入也需要符合RLS，但因为是刚创建的社团，owner_id 匹配，所以上面的新策略 owner_insert_members 会通过
     await supabase.from('circle_members').insert([{ circle_id: c.id, user_id: currentUser.value.id, role: '主催' }])
     await fetchAllData()
   } catch (e) { alert('创建失败: ' + e.message) } finally { creating.value = false }
@@ -460,7 +458,6 @@ const submitApplication = async (cid) => {
   }
 
   if (inviteInfo.value && inviteInfo.value.id) { 
-    // 简单的计数更新，不强制 RPC
     await supabase.from('circle_invites').update({ used_count: inviteInfo.value.used_count + 1 }).eq('id', inviteInfo.value.id) 
   }
 
@@ -470,9 +467,18 @@ const submitApplication = async (cid) => {
   await fetchAllData()
 }
 
+// 审批通过逻辑 (这里是关键修复点)
 const handleApprove = async (app) => {
-  const { error } = await supabase.from('circle_members').insert([{ circle_id: app.circle_id, user_id: app.user_id, role: '成员' }])
-  if (error) return alert(error.message)
+  // 因为现在你是团长，你的 auth.uid 等于 circles.owner_id
+  // SQL策略 owner_insert_members 会允许你插入这一行
+  const { error } = await supabase.from('circle_members').insert([{ 
+    circle_id: app.circle_id, 
+    user_id: app.user_id, 
+    role: '成员' 
+  }])
+  
+  if (error) return alert('批准失败: ' + error.message)
+  
   await supabase.from('circle_applications').update({ status: 'approved' }).eq('id', app.id)
   fetchMembers(myCircle.value.id); fetchApplications(myCircle.value.id)
 }
@@ -492,19 +498,17 @@ const reloadPage = () => window.location.reload()
 </script>
 
 <style scoped>
+/* 样式保持不变，新增错误边界样式 */
 .dashboard-container { max-width: 900px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', sans-serif; }
 
-/* 致命错误提示框 */
-.fatal-error-box { background: #ffebee; color: #c62828; padding: 30px; border-radius: 12px; text-align: center; margin-top: 50px; border: 1px solid #ef9a9a; }
-.fatal-error-box h3 { margin: 0 0 10px 0; }
-.fatal-error-box button { margin-top: 15px; padding: 8px 20px; border: none; background: #c62828; color: white; border-radius: 4px; cursor: pointer; }
+.error-boundary { background: #ffebee; color: #c62828; padding: 40px; border-radius: 12px; text-align: center; margin-top: 50px; border: 1px solid #ef9a9a; }
+.btn-refresh { margin-top: 15px; padding: 8px 20px; border: none; background: #c62828; color: white; border-radius: 4px; cursor: pointer; }
 
-/* 全屏Loading */
 .full-screen-loading { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2000; }
 .spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #39C5BB; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 15px; }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-/* 复用之前的CSS样式 */
+/* 头部样式 */
 .profile-header { background: white; padding: 25px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px; }
 .avatar-section { display: flex; gap: 15px; align-items: center; }
 .avatar { width: 60px; height: 60px; background: #39C5BB; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; }
@@ -516,10 +520,12 @@ const reloadPage = () => window.location.reload()
 .admin-btn { background: #333; color: white; }
 .logout-btn { background: #fee; color: #e33; }
 
+/* Tabs */
 .tabs { display: flex; gap: 20px; border-bottom: 1px solid #eee; margin-bottom: 20px; }
 .tab-btn { padding: 10px 5px; background: none; border: none; font-size: 16px; color: #999; cursor: pointer; border-bottom: 3px solid transparent; }
 .tab-btn.active { color: #39C5BB; border-bottom-color: #39C5BB; font-weight: bold; }
 
+/* 社团看板 */
 .circle-dashboard { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); }
 .circle-header { display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 20px; }
 .badge-mine { background: #39C5BB; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
@@ -531,6 +537,7 @@ const reloadPage = () => window.location.reload()
 .switch-label { display: flex; gap: 5px; font-size: 13px; cursor: pointer; align-items: center; color: #666; }
 .danger-btn { background: white; border: 1px solid #ff7675; color: #ff7675; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
 
+/* 邀请生成器 & 收件箱 & 成员列表 */
 .invite-generator { background: #f8f9fa; border: 1px dashed #ccc; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
 .ig-header h4 { margin: 0 0 5px; font-size: 14px; }
 .ig-desc { font-size: 12px; color: #888; }
@@ -560,6 +567,7 @@ const reloadPage = () => window.location.reload()
 .uid { font-size: 11px; color: #999; font-family: monospace; }
 .kick-btn { font-size: 10px; color: red; background: none; border: 1px solid red; border-radius: 3px; cursor: pointer; }
 
+/* 邀请界面 & 探索 */
 .no-circle-explore { background: #f5f7fa; padding: 20px; border-radius: 12px; }
 .target-invite-box { background: white; max-width: 400px; margin: 0 auto; padding: 30px; border-radius: 12px; text-align: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05); }
 .error-msg { color: #c62828; background: #ffebee; padding: 10px; border-radius: 6px; margin: 10px 0; font-size: 13px; }
@@ -572,6 +580,7 @@ const reloadPage = () => window.location.reload()
 .explore-hero h3 { margin: 0; color: #2c3e50; }
 .explore-hero p { margin: 5px 0 0; color: #7f8c8d; font-size: 14px; }
 
+/* 垂直分层布局 */
 .actions-stack { display: flex; flex-direction: column; gap: 30px; }
 .action-layer { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 2px 10px rgba(0,0,0,0.02); }
 
@@ -601,6 +610,7 @@ const reloadPage = () => window.location.reload()
 .card-meta { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #999; }
 .join-tag { color: #39C5BB; font-weight: bold; background: #e0f2f1; padding: 2px 6px; border-radius: 4px; }
 
+/* Modal */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 999; }
 .modal-content { background: white; padding: 25px; border-radius: 12px; width: 350px; }
 .form-group { margin-bottom: 12px; }
