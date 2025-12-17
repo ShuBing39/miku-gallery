@@ -47,7 +47,7 @@
         
         <div v-if="loading" class="loading-skel">加载中...</div>
         <div v-else class="item-list">
-          <div v-for="item in latestGoods" :key="item.id" class="list-item" @click="openLink(item.link)">
+          <div v-for="item in latestGoods" :key="item.id" class="list-item" @click="handleItemClick(item)">
             <img :src="item.image_url" class="item-thumb" referrerpolicy="no-referrer" @error="handleImgError"/>
             <div class="item-info">
               <h4 class="item-title">{{ item.name }}</h4>
@@ -68,7 +68,7 @@
 
         <div v-if="loading" class="loading-skel">加载中...</div>
         <div v-else class="item-list">
-          <div v-for="ev in latestEvents" :key="ev.id" class="list-item event-style" @click="openLink(ev.link)">
+          <div v-for="ev in latestEvents" :key="ev.id" class="list-item event-style" @click="handleItemClick(ev)">
             <img :src="ev.image_url" class="item-thumb" referrerpolicy="no-referrer" @error="handleImgError"/>
             <div class="item-info">
               <h4 class="item-title">{{ ev.name }}</h4>
@@ -76,7 +76,7 @@
                 <span class="status-badge" :class="getEventStatus(ev).class">
                   {{ getEventStatus(ev).text }}
                 </span>
-                <span class="date">{{ ev.release_date }}</span>
+                <span class="tag" :class="ev.category === '同人企划' ? 'proj-tag' : 'evt-tag'">{{ ev.category }}</span>
               </div>
             </div>
           </div>
@@ -100,8 +100,7 @@ const latestGoods = ref([])
 const latestEvents = ref([])
 const loading = ref(true)
 
-// 定义活动分类 (用于区分左右栏)
-// 修改点：在此处增加了 '同人活动', '企划', '同人企划'，这样它们就会出现在右边，并从左边消失
+// 定义活动分类 (包含企划)
 const EVENT_CATEGORIES = [
   '魔法未来', '雪未来', 'MIKU EXPO', '交响乐会', '演唱会', 
   '联动/咖啡厅', '展览/漫展', '线下活动', '同人活动', '企划', '同人企划'
@@ -110,6 +109,20 @@ const EVENT_CATEGORIES = [
 onMounted(async () => {
   await fetchData()
 })
+
+// 🔥 核心修改：智能跳转逻辑
+const handleItemClick = (item) => {
+  if (item.category === '同人企划' || item.category === '企划') {
+    // 如果是企划，去企划专用看板 /project/ID
+    router.push(`/project/${item.id}`)
+  } else if (item.link && item.link.startsWith('http')) {
+    // 如果有外部链接且不是企划 (部分活动直接跳官网)
+    window.open(item.link, '_blank')
+  } else {
+    // 默认去周边/Wiki详情页 /item/ID
+    router.push(`/item/${item.id}`)
+  }
+}
 
 const fetchData = async () => {
   loading.value = true
@@ -120,7 +133,7 @@ const fetchData = async () => {
     .select('*')
     .not('category', 'in', `(${EVENT_CATEGORIES.map(c=>`"${c}"`).join(',')})`) 
     .eq('status', 'approved') 
-    .order('release_date', { ascending: false }) 
+    .order('created_at', { ascending: false }) 
     .limit(5)
 
   if (goods) latestGoods.value = goods
@@ -131,7 +144,7 @@ const fetchData = async () => {
     .select('*')
     .in('category', EVENT_CATEGORIES)
     .eq('status', 'approved')
-    .order('release_date', { ascending: false }) 
+    .order('created_at', { ascending: false }) 
     .limit(5)
   
   if (events) latestEvents.value = events
@@ -139,11 +152,8 @@ const fetchData = async () => {
   loading.value = false
 }
 
-// 辅助功能
-const openLink = (url) => { if(url) window.open(url, '_blank') }
 const handleImgError = (e) => { e.target.src = 'https://via.placeholder.com/100x100?text=No+Img' }
 
-// 活动状态判断
 const getEventStatus = (ev) => {
   const today = new Date().toISOString().split('T')[0]
   if (ev.release_date && today < ev.release_date) return { text: '即将开始', class: 'upcoming' }
@@ -172,7 +182,6 @@ const getEventStatus = (ev) => {
 .nav-card h3 { margin: 0 0 5px 0; font-size: 14px; color: #333; }
 .nav-card p { margin: 0; font-size: 11px; color: #888; }
 
-/* 底部彩色线条 */
 .wiki-card { border-bottom: 3px solid #39c5bb; }
 .event-card { border-bottom: 3px solid #8b5cf6; } 
 .project-card { border-bottom: 3px solid #f472b6; }
@@ -201,6 +210,8 @@ const getEventStatus = (ev) => {
 .date { color: #aaa; font-family: monospace; }
 .tag { padding: 2px 6px; border-radius: 4px; font-size: 11px; }
 .tag.cat { background: #e3f2fd; color: #1565c0; }
+.proj-tag { background: #f3e5f5; color: #7b1fa2; font-weight: bold; }
+.evt-tag { background: #e0f2f1; color: #00695c; }
 
 /* Event Styles */
 .event-style .item-title { font-weight: bold; }

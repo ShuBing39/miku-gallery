@@ -38,7 +38,9 @@
       
       <div v-if="projects.length === 0 && !loading" class="empty-state">暂无公开企划</div>
   
-      </div>
+      <div v-if="loading" class="loading-state">加载中...</div>
+  
+    </div>
   </template>
   
   <script setup>
@@ -56,23 +58,26 @@
   
   onMounted(async () => {
     await fetchProjects()
+    // 处理URL带来的邀请码
     if (route.query.code) {
       inviteCodeInput.value = route.query.code
       handleManualSearch()
-      router.replace('/projects')
+      router.replace('/projects') // 清除URL参数
     }
   })
   
   const fetchProjects = async () => {
+    loading.value = true
     const today = new Date().toISOString().split('T')[0]
     const { data } = await supabase
       .from('items')
       .select('*')
-      .eq('category', '同人企划')
+      .eq('category', '同人企划') // 只筛选企划
       .eq('status', 'approved')
       .order('created_at', { ascending: false })
   
     if (data) {
+      // 逻辑：公开的直接显示；私密的只有已过期的才偶尔显示(或者完全不显示)，这里保留你原本逻辑
       projects.value = data.filter(p => !p.is_private || (p.is_private && p.end_date && p.end_date < today))
     }
     loading.value = false
@@ -80,15 +85,31 @@
   
   const handleManualSearch = async () => {
     if(!inviteCodeInput.value) return alert('请输入邀请码')
+    
+    // 1. 查邀请码表找 project_id (假设你有 project_invites 表)
+    // 如果没有这张表，你可以根据需求修改，或者直接跳过这一步用 ID 查
+    // 这里暂时假设通过邀请码能查到 project_id
     const { data: inv } = await supabase.from('project_invites').select('project_id').eq('code', inviteCodeInput.value.toUpperCase()).single()
+    
+    // 如果没查到邀请码，或者表不存在，这里会报错。
+    // 为了稳健，如果报错，尝试直接用 ID 查 (假设输入的是 ID) 或者提示无效
     if (!inv) return alert('无效的邀请码')
     
+    // 2. 查企划详情
     const { data: p } = await supabase.from('items').select('*').eq('id', inv.project_id).single()
+    
     if (p) {
-      const exists = projects.value.find(x => x.id === p.id)
-      if (!exists) { projects.value.unshift(p); alert(`解锁企划：${p.name}`) } 
-      else alert('已在列表中')
+      // 3. 直接跳转到详情页！(比加入列表更直观)
+      router.push(`/project/${p.id}`)
+    } else {
+      alert('未找到对应企划')
     }
+  }
+  
+  // 核心跳转函数
+  const openLink = (item) => {
+    // 跳转到我们在 router 里定义的详情页路由
+    router.push(`/project/${item.id}`)
   }
   
   // 辅助函数
@@ -104,12 +125,10 @@
     return Math.min(Math.max((pass/total)*100, 0), 100)
   }
   const formatDate = (d) => d ? d.replace(/-/g, '/') : ''
-  const openLink = () => {}
   const handleImgError = (e) => { e.target.src = 'https://via.placeholder.com/300x200?text=Project' }
   </script>
   
   <style scoped>
-  /* 保持 Projects.vue 原有的展示样式，只是去掉了 Modal 相关的 CSS */
   .projects-container { max-width: 1000px; margin: 0 auto; padding: 20px; font-family: sans-serif; position: relative; }
   .back-home-btn { position: absolute; top: 20px; left: 0; background: white; border: 1px solid #ddd; padding: 6px 12px; border-radius: 20px; cursor: pointer; color: #666; font-weight: bold; }
   
@@ -117,7 +136,6 @@
   .main-title { color: #2c3e50; margin: 0; font-size: 2.2rem; }
   .sub-title { color: #888; margin-top: 5px; }
   
-  /* 发起按钮样式 */
   .create-project-btn { background: linear-gradient(135deg, #39C5BB, #26a69a); color: white; border: none; padding: 12px 30px; border-radius: 30px; font-weight: bold; cursor: pointer; margin-top: 15px; box-shadow: 0 4px 15px rgba(57, 197, 187, 0.3); transition: 0.2s; font-size: 16px; }
   .create-project-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(57, 197, 187, 0.4); }
   
@@ -126,7 +144,6 @@
   .private-access-bar input:focus { border-color: #39C5BB; }
   .private-access-bar button { background: #333; color: white; border: none; padding: 10px 20px; border-radius: 25px; cursor: pointer; }
   
-  /* Grid & Cards */
   .projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; }
   .project-card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); cursor: pointer; transition: 0.3s; border: 1px solid #eee; display: flex; flex-direction: column; }
   .project-card:hover { transform: translateY(-5px); border-color: #39C5BB; }
@@ -145,4 +162,5 @@
   .progress-fill { height: 100%; background: #39C5BB; }
   .dates { font-size: 11px; color: #999; text-align: right; }
   .empty-state { text-align: center; padding: 50px; color: #aaa; }
+  .loading-state { text-align: center; padding: 50px; color: #999; }
   </style>
