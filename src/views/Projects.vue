@@ -9,6 +9,12 @@
           <input v-model="searchText" placeholder="搜索企划..." @keyup.enter="fetchProjects" />
           <button @click="fetchProjects">🔍</button>
         </div>
+        
+        <div class="join-code-bar">
+          <input v-model="inviteCode" placeholder="输入企划邀请码" maxlength="8" />
+          <button @click="handleJoinProjectByCode">加入</button>
+        </div>
+
         <button class="btn-create" @click="handleCreateClick">+ 发起新企划</button>
       </div>
     </div>
@@ -66,6 +72,7 @@ const router = useRouter()
 const projects = ref([])
 const loading = ref(true)
 const searchText = ref('')
+const inviteCode = ref('') 
 
 onMounted(() => {
   fetchProjects()
@@ -75,33 +82,89 @@ const handleCreateClick = () => {
   router.push('/submit-project')
 }
 
-const fetchProjects = async () => {
-  loading.value = true
+const handleJoinProjectByCode = async () => {
+  if (!inviteCode.value) return alert('请输入邀请码')
   
-  let query = supabase
-    .from('projects')
-    .select('*, profiles(username)')
-    .order('created_at', { ascending: false })
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return router.push('/login')
 
-  if (searchText.value) {
-    query = query.ilike('name', `%${searchText.value}%`)
-  }
-
-  const { data, error } = await query
+  const { data, error } = await supabase.rpc('join_project_by_invite_code', {
+    p_code: inviteCode.value.trim(),
+    p_user_id: user.id
+  })
 
   if (error) {
-    console.error('加载失败:', error)
+    alert('加入失败：' + error.message)
+  } else if (data.success) {
+    // 🔥 新增：加入成功后，插入一条系统通知
+    const userName = user.user_metadata.username || '新成员'
+    await supabase.from('project_comments').insert({
+      project_id: data.project_id,
+      content: `🎉 ${userName} 通过邀请码加入了团队！`,
+      type: 'system',
+      user_id: user.id
+    })
+
+    alert('成功加入企划！')
+    router.push(`/project/${data.project_id}`)
   } else {
-    projects.value = data.map(p => ({
-      ...p,
-      uploader_name: p.profiles?.username || '未知用户'
-    }))
+    alert('邀请码无效或已过期')
   }
-  loading.value = false
+}
+
+// 手动分步获取数据，避开 201/400 错误
+const fetchProjects = async () => {
+  loading.value = true
+  projects.value = []
+
+  try {
+    let query = supabase
+      .from('projects')
+      .select('*')
+      .eq('allow_external', true) 
+      .order('created_at', { ascending: false })
+
+    if (searchText.value) {
+      query = query.ilike('name', `%${searchText.value}%`)
+    }
+
+    const { data: projectList, error: projError } = await query
+    if (projError) throw projError
+
+    if (!projectList || projectList.length === 0) {
+      loading.value = false
+      return
+    }
+
+    const userIds = [...new Set(projectList.map(p => p.uploader_id).filter(Boolean))]
+
+    let profilesMap = {}
+    if (userIds.length > 0) {
+      const { data: profiles, error: profError } = await supabase
+        .from('profiles')
+        .select('id, username')
+        .in('id', userIds)
+      
+      if (!profError && profiles) {
+        profiles.forEach(p => {
+          profilesMap[p.id] = p.username
+        })
+      }
+    }
+
+    projects.value = projectList.map(p => ({
+      ...p,
+      uploader_name: profilesMap[p.uploader_id] || '未知用户'
+    }))
+
+  } catch (err) {
+    console.error('加载企划失败:', err)
+  } finally {
+    loading.value = false
+  }
 }
 
 const goToDetail = async (id) => {
-  // 🔥 新增：点击时增加浏览量
   await supabase.rpc('increment_project_view', { row_id: id })
   router.push(`/project/${id}`)
 }
@@ -120,15 +183,18 @@ const getStatusText = (s) => {
 </script>
 
 <style scoped>
-/* 保持原有样式，新增 view-count-badge */
+/* 样式保持不变 */
 .projects-hall { max-width: 1200px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', sans-serif; }
 .hall-header { text-align: center; margin-bottom: 40px; padding: 40px 0; background: linear-gradient(to right, #e0f7fa, #f3e5f5); border-radius: 16px; }
 .hall-header h1 { margin: 0 0 10px; color: #333; font-size: 32px; }
 .hall-header p { color: #666; margin-bottom: 25px; }
-.actions { display: flex; justify-content: center; gap: 15px; }
+.actions { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; }
 .search-bar { display: flex; background: white; padding: 5px; border-radius: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
 .search-bar input { border: none; padding: 10px 15px; outline: none; width: 200px; font-size: 14px; }
 .search-bar button { border: none; background: none; cursor: pointer; padding: 0 15px; font-size: 18px; }
+.join-code-bar { display: flex; background: white; padding: 5px; border-radius: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border: 1px solid #e0f7fa; }
+.join-code-bar input { border: none; padding: 10px 15px; outline: none; width: 120px; font-size: 14px; }
+.join-code-bar button { background: #ff9800; color: white; border: none; border-radius: 20px; padding: 0 15px; font-weight: bold; cursor: pointer; }
 .btn-create { background: #39C5BB; color: white; border: none; padding: 10px 25px; border-radius: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(57, 197, 187, 0.3); transition: 0.2s; }
 .btn-create:hover { transform: translateY(-2px); }
 .loading-box { text-align: center; padding: 50px; color: #999; }
@@ -141,7 +207,6 @@ const getStatusText = (s) => {
 .status-tag { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
 .status-tag.recruiting { background: #39C5BB; }
 .status-tag.ended { background: #999; }
-/* 🔥 新增：浏览量角标 */
 .view-count-badge { position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; }
 .card-body { padding: 15px; }
 .card-tags { margin-bottom: 8px; }
