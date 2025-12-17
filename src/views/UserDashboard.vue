@@ -1,9 +1,15 @@
 <template>
   <div class="dashboard-container">
     
-    <div v-if="initializing" class="full-screen-loading">
+    <div v-if="fatalError" class="fatal-error-box">
+      <h3>⚠️ 发生错误</h3>
+      <p>{{ fatalError }}</p>
+      <button @click="reloadPage">刷新页面</button>
+    </div>
+
+    <div v-else-if="initializing" class="full-screen-loading">
       <div class="spinner"></div>
-      <p>正在验证身份...</p>
+      <p>正在加载用户信息...</p>
     </div>
 
     <template v-else>
@@ -12,7 +18,7 @@
           <div class="avatar">{{ userInitial }}</div>
           <div class="info">
             <h2>{{ currentUser?.user_metadata?.username || '用户' }}</h2>
-            <p class="email">{{ currentUser?.email }}</p>
+            <p class="email">{{ currentUser?.email || '无邮箱信息' }}</p>
             <div class="tags">
               <span class="role-badge" v-if="isAdmin">⚡ 管理员</span>
               <span class="role-badge member" v-else>☁️ 普通成员</span>
@@ -233,7 +239,6 @@
         </div>
       </div>
     </template>
-
   </div>
 </template>
 
@@ -246,8 +251,9 @@ const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env
 const router = useRouter()
 const route = useRoute()
 
-// 全局状态
-const initializing = ref(true) // 核心：初始化标记，防止未登录时渲染页面导致白屏
+// 核心状态
+const initializing = ref(true)
+const fatalError = ref('') // 存储致命错误信息
 const currentUser = ref(null)
 
 // 页面状态
@@ -277,35 +283,45 @@ const showApplyModal = ref(false)
 const selectedCircle = ref(null)
 const applyForm = ref({ nickname: '', contact: '', reason: '' })
 
-// 计算属性
-const userInitial = computed(() => currentUser.value?.email?.[0].toUpperCase() || 'U')
+// 安全的计算属性 (修复白屏的关键点)
+const userInitial = computed(() => {
+  if (!currentUser.value?.email) return 'U'
+  return currentUser.value.email[0]?.toUpperCase() || 'U'
+})
 const isAdmin = computed(() => currentUser.value?.email === 'admin@39wikis.com')
 const isOwner = computed(() => myCircle.value && currentUser.value && myCircle.value.owner_id === currentUser.value.id)
 
 onMounted(async () => {
   try {
-    initializing.value = true // 开始初始化，全屏Loading
-
-    // 1. 获取用户
-    const { data: { user } } = await supabase.auth.getUser()
-    const inviteCode = route.query.invite
-
-    // 2. 如果未登录
-    if (!user) {
-      if (inviteCode) {
-        // 保存邀请码到 Session，以便登录后恢复
-        sessionStorage.setItem('pending_invite', inviteCode)
-        alert('该链接需要登录后才能查看，请先登录或注册。')
-      }
-      // 强制跳转登录
-      router.push('/login')
-      return // 🔥 关键：直接中断执行，防止后续代码报错导致白屏
+    initializing.value = true 
+    
+    // 1. 获取 URL 中的 invite 参数 (兼容性处理)
+    // 优先用 route.query，如果没有，尝试手动解析 location.search (防止VueRouter初始化慢)
+    let inviteCode = route.query.invite
+    if (!inviteCode) {
+      const params = new URLSearchParams(window.location.search)
+      inviteCode = params.get('invite')
     }
 
-    // 3. 用户已登录，设置状态
+    // 2. 获取用户
+    const { data: { user }, error } = await supabase.auth.getUser()
+    
+    if (error) throw error
+
+    // 3. 未登录处理
+    if (!user) {
+      if (inviteCode) {
+        sessionStorage.setItem('pending_invite', inviteCode)
+        alert('该邀请链接有效，请先登录/注册后自动加入！')
+      }
+      router.push('/login')
+      return // 中断执行，等待跳转
+    }
+
+    // 4. 已登录，初始化数据
     currentUser.value = user
 
-    // 4. 处理邀请码 (缓存的 或 URL中的)
+    // 5. 处理邀请码 (缓存 > URL)
     const cachedInvite = sessionStorage.getItem('pending_invite')
     if (cachedInvite) {
       await verifyInvite(cachedInvite)
@@ -314,13 +330,14 @@ onMounted(async () => {
       await verifyInvite(inviteCode)
     }
 
-    // 5. 加载数据
+    // 6. 加载社团数据
     await fetchAllData()
 
   } catch (e) {
-    console.error("初始化失败:", e)
+    console.error("Dashboard Crash:", e)
+    fatalError.value = "页面初始化失败: " + (e.message || "未知错误")
   } finally {
-    initializing.value = false // 结束初始化，显示页面
+    initializing.value = false
   }
 })
 
@@ -347,9 +364,10 @@ const verifyInvite = async (inviteId) => {
   inviteError.value = ''; inviteInfo.value = null
   
   try {
-    const { data: invite, error } = await supabase.from('circle_invites').select('*, circles(name)').eq('id', inviteId).single()
+    const { data: invite, error } = await supabase.from('circle_invites').select('*, circles(name)').eq('id', inviteId).maybeSingle()
     
-    if (error || !invite) { 
+    if (error) throw error
+    if (!invite) { 
       inviteError.value = '该链接无效或不存在'; inviteInfo.value = { dummy: true }; return 
     }
     if (new Date() > new Date(invite.expires_at)) { 
@@ -359,46 +377,47 @@ const verifyInvite = async (inviteId) => {
       inviteError.value = '该链接的使用次数已耗尽'; inviteInfo.value = { dummy: true }; return 
     }
     
-    // 验证成功
     inviteInfo.value = invite; 
     inviteCircleName.value = invite.circles?.name
   } catch (e) {
-    inviteError.value = '验证出错'; inviteInfo.value = { dummy: true }
+    console.error('Verify Invite Error:', e)
+    inviteError.value = '邀请码验证失败'; inviteInfo.value = { dummy: true }
   }
 }
 
 // --- 数据加载 ---
 
 const fetchAllData = async () => {
-  if (!currentUser.value) return // 双重保险
+  if (!currentUser.value) return
   loadingCircle.value = true
   
-  // 1. 查我是否在社团中
-  const { data: mem } = await supabase.from('circle_members').select('circle_id').eq('user_id', currentUser.value.id).maybeSingle()
-  
-  if (mem) {
-    // 已入社：清空邀请状态，显示社团
-    inviteInfo.value = null
-    const { data: circle } = await supabase.from('circles').select('*').eq('id', mem.circle_id).single()
-    if (circle) {
-      myCircle.value = circle
-      await fetchMembers(circle.id)
-      if (circle.owner_id === currentUser.value.id) await fetchApplications(circle.id)
-    }
-  } else {
-    // 未入社：查申请状态
-    const { data: pending } = await supabase.from('circle_applications').select('*, circles(name)').eq('user_id', currentUser.value.id).eq('status', 'pending').maybeSingle()
+  try {
+    const { data: mem } = await supabase.from('circle_members').select('circle_id').eq('user_id', currentUser.value.id).maybeSingle()
     
-    if (pending) { 
-      myPendingApp.value = pending; 
-      pendingCircleName.value = pending.circles?.name || '未知社团'; 
-      inviteInfo.value = null 
-    } else { 
-      // 既没入社也没申请 -> 加载广场
-      await fetchPublicCircles() 
+    if (mem) {
+      inviteInfo.value = null // 已有社团，忽略邀请
+      const { data: circle } = await supabase.from('circles').select('*').eq('id', mem.circle_id).single()
+      if (circle) {
+        myCircle.value = circle
+        await fetchMembers(circle.id)
+        if (circle.owner_id === currentUser.value.id) await fetchApplications(circle.id)
+      }
+    } else {
+      const { data: pending } = await supabase.from('circle_applications').select('*, circles(name)').eq('user_id', currentUser.value.id).eq('status', 'pending').maybeSingle()
+      if (pending) { 
+        myPendingApp.value = pending; 
+        pendingCircleName.value = pending.circles?.name || '未知社团'; 
+        inviteInfo.value = null 
+      } else { 
+        await fetchPublicCircles() 
+      }
     }
+  } catch (e) {
+    console.error("Data Load Error:", e)
+    // 这里不抛出致命错误，允许显示部分UI
+  } finally {
+    loadingCircle.value = false
   }
-  loadingCircle.value = false
 }
 
 const fetchMembers = async (cid) => { const { data } = await supabase.from('circle_members').select('*').eq('circle_id', cid); members.value = data || [] }
@@ -440,8 +459,8 @@ const submitApplication = async (cid) => {
     return 
   }
 
-  // 增加使用次数 (可选)
   if (inviteInfo.value && inviteInfo.value.id) { 
+    // 简单的计数更新，不强制 RPC
     await supabase.from('circle_invites').update({ used_count: inviteInfo.value.used_count + 1 }).eq('id', inviteInfo.value.id) 
   }
 
@@ -469,18 +488,23 @@ const leaveCircle = async () => { if(confirm('退出？')) { await supabase.from
 const disbandCircle = async () => { if(confirm('确认解散？')) { await supabase.from('circles').delete().eq('id', myCircle.value.id); myCircle.value = null; fetchAllData() } }
 const getRoleStyle = (r) => r === '主催' ? 'role-leader' : 'role-mem'
 const handleLogout = async () => { await supabase.auth.signOut(); router.push('/login') }
+const reloadPage = () => window.location.reload()
 </script>
 
 <style scoped>
-/* 样式复用上一个版本的 "分层布局" */
 .dashboard-container { max-width: 900px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', sans-serif; }
+
+/* 致命错误提示框 */
+.fatal-error-box { background: #ffebee; color: #c62828; padding: 30px; border-radius: 12px; text-align: center; margin-top: 50px; border: 1px solid #ef9a9a; }
+.fatal-error-box h3 { margin: 0 0 10px 0; }
+.fatal-error-box button { margin-top: 15px; padding: 8px 20px; border: none; background: #c62828; color: white; border-radius: 4px; cursor: pointer; }
 
 /* 全屏Loading */
 .full-screen-loading { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2000; }
 .spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #39C5BB; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 15px; }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-/* 头部样式 */
+/* 复用之前的CSS样式 */
 .profile-header { background: white; padding: 25px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px; }
 .avatar-section { display: flex; gap: 15px; align-items: center; }
 .avatar { width: 60px; height: 60px; background: #39C5BB; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; }
@@ -492,12 +516,10 @@ const handleLogout = async () => { await supabase.auth.signOut(); router.push('/
 .admin-btn { background: #333; color: white; }
 .logout-btn { background: #fee; color: #e33; }
 
-/* Tabs */
 .tabs { display: flex; gap: 20px; border-bottom: 1px solid #eee; margin-bottom: 20px; }
 .tab-btn { padding: 10px 5px; background: none; border: none; font-size: 16px; color: #999; cursor: pointer; border-bottom: 3px solid transparent; }
 .tab-btn.active { color: #39C5BB; border-bottom-color: #39C5BB; font-weight: bold; }
 
-/* 社团看板 */
 .circle-dashboard { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); }
 .circle-header { display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 20px; }
 .badge-mine { background: #39C5BB; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
@@ -509,7 +531,6 @@ const handleLogout = async () => { await supabase.auth.signOut(); router.push('/
 .switch-label { display: flex; gap: 5px; font-size: 13px; cursor: pointer; align-items: center; color: #666; }
 .danger-btn { background: white; border: 1px solid #ff7675; color: #ff7675; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
 
-/* 邀请生成器 & 收件箱 */
 .invite-generator { background: #f8f9fa; border: 1px dashed #ccc; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
 .ig-header h4 { margin: 0 0 5px; font-size: 14px; }
 .ig-desc { font-size: 12px; color: #888; }
@@ -539,7 +560,6 @@ const handleLogout = async () => { await supabase.auth.signOut(); router.push('/
 .uid { font-size: 11px; color: #999; font-family: monospace; }
 .kick-btn { font-size: 10px; color: red; background: none; border: 1px solid red; border-radius: 3px; cursor: pointer; }
 
-/* 邀请界面 & 探索 */
 .no-circle-explore { background: #f5f7fa; padding: 20px; border-radius: 12px; }
 .target-invite-box { background: white; max-width: 400px; margin: 0 auto; padding: 30px; border-radius: 12px; text-align: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05); }
 .error-msg { color: #c62828; background: #ffebee; padding: 10px; border-radius: 6px; margin: 10px 0; font-size: 13px; }
@@ -581,7 +601,6 @@ const handleLogout = async () => { await supabase.auth.signOut(); router.push('/
 .card-meta { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #999; }
 .join-tag { color: #39C5BB; font-weight: bold; background: #e0f2f1; padding: 2px 6px; border-radius: 4px; }
 
-/* Modal */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 999; }
 .modal-content { background: white; padding: 25px; border-radius: 12px; width: 350px; }
 .form-group { margin-bottom: 12px; }
