@@ -6,9 +6,10 @@
       <div class="header-left">
         <h1>🎛️ 综合管理后台</h1>
         <div class="admin-tabs">
-          <button class="nav-tab" :class="{ active: currentTab === 'audit' }" @click="currentTab = 'audit'">📦 周边商品管理</button>
-          <button class="nav-tab" :class="{ active: currentTab === 'events' }" @click="currentTab = 'events'">📅 企划与活动</button>
-          <button class="nav-tab" :class="{ active: currentTab === 'invites' }" @click="currentTab = 'invites'">🔑 邀请码管理</button>
+          <button class="nav-tab" :class="{ active: currentTab === 'audit' }" @click="currentTab = 'audit'">📦 周边审核</button>
+          <button class="nav-tab" :class="{ active: currentTab === 'events' }" @click="currentTab = 'events'">📅 活动审核</button>
+          <button class="nav-tab" :class="{ active: currentTab === 'invites' }" @click="currentTab = 'invites'">🔑 邀请码</button>
+          <button class="nav-tab" :class="{ active: currentTab === 'banner' }" @click="currentTab = 'banner'">🖼️ 首页轮播</button>
         </div>
       </div>
       <div class="header-actions">
@@ -57,9 +58,7 @@
               <td><span class="status-badge" :class="item.status">{{ item.status || 'approved' }}</span></td>
               <td><span class="badge cat">{{ item.category }}</span></td>
               <td><span class="price">{{ item.market_price ? '¥'+item.market_price : '-' }}</span></td>
-              <td>
-                <button @click="deleteItem(item.id)" class="del-btn">🗑️</button>
-              </td>
+              <td><button @click="deleteItem(item.id)" class="del-btn">🗑️</button></td>
             </tr>
           </tbody>
         </table>
@@ -72,9 +71,8 @@
     </div>
 
     <div v-show="currentTab === 'events'" class="tab-content">
-      
       <div v-if="pendingProjects.length > 0" class="audit-section project-audit">
-        <div class="section-header"><h3>📢 待审核企划 ({{ pendingProjects.length }})</h3></div>
+        <div class="section-header"><h3>📢 待审核旧版企划 ({{ pendingProjects.length }})</h3></div>
         <div class="audit-grid">
           <div v-for="proj in pendingProjects" :key="proj.id" class="audit-card project-style">
             <div class="img-box-wrapper">
@@ -94,7 +92,7 @@
 
       <div class="toolbar event-toolbar">
         <div class="left-tools">
-          <input v-model="eventSearch" placeholder="🔍 搜索活动或企划..." class="search-input" />
+          <input v-model="eventSearch" placeholder="🔍 搜索活动..." class="search-input" />
           <button @click="fetchEventsOnly" class="refresh-btn">🔄 刷新</button>
         </div>
       </div>
@@ -108,17 +106,12 @@
             <tr v-for="ev in eventList" :key="ev.id">
               <td>{{ ev.id }}</td>
               <td><img :src="ev.image_url" class="mini-thumb zoom-cursor" @click="openLightbox(ev.image_url)" /></td>
-              <td>
-                <span v-if="ev.category === '同人企划'" class="internal-link" @click="$router.push(`/project/${ev.id}`)">{{ ev.name }}</span>
-                <span v-else class="bold-text">{{ ev.name }}</span>
-              </td>
+              <td><span class="bold-text">{{ ev.name }}</span></td>
               <td><span class="badge" :class="ev.category === '同人企划' ? 'project-badge' : 'cat'">{{ ev.category }}</span></td>
               <td class="date-col">{{ ev.release_date }}</td>
               <td class="date-col" :class="{'missing': !ev.event_end_date}">{{ ev.event_end_date || '-' }}</td>
               <td><span class="status-pill" :class="calcEventStatus(ev).class">{{ calcEventStatus(ev).text }}</span></td>
-              <td>
-                <button @click="deleteItem(ev.id, true)" class="del-btn">🗑️</button>
-              </td>
+              <td><button @click="deleteItem(ev.id, true)" class="del-btn">🗑️</button></td>
             </tr>
           </tbody>
         </table>
@@ -129,7 +122,7 @@
       <div class="invite-header-box">
         <div class="left-box">
           <h2>🔑 注册邀请码管理</h2>
-          <p>用于分发给新用户进行注册，点击生成即可创建。</p>
+          <p>用于分发给新用户进行注册。</p>
         </div>
         <div class="right-actions">
           <button @click="generateInviteCode" class="gen-btn" :disabled="isGenerating">
@@ -137,25 +130,80 @@
           </button>
         </div>
       </div>
-
       <div class="toolbar">
-        <label class="filter-check">
-          <input type="checkbox" v-model="showUnusedOnly" @change="fetchInviteCodes"> 只看未使用
-        </label>
+        <label class="filter-check"><input type="checkbox" v-model="showUnusedOnly" @change="fetchInviteCodes"> 只看未使用</label>
         <button @click="fetchInviteCodes" class="refresh-btn">🔄 刷新列表</button>
       </div>
-
       <div class="invite-grid" v-if="inviteCodes.length > 0">
         <div v-for="code in inviteCodes" :key="code.id" class="invite-card" :class="{ used: code.is_used }">
           <div class="code-display">{{ code.code }}</div>
-          <div class="status-tag" :class="code.is_used ? 'used-tag' : 'new-tag'">
-            {{ code.is_used ? '🔴 已使用' : '🟢 未使用' }}
-          </div>
+          <div class="status-tag" :class="code.is_used ? 'used-tag' : 'new-tag'">{{ code.is_used ? '🔴 已使用' : '🟢 未使用' }}</div>
           <div class="meta-info">创建于: {{ new Date(code.created_at).toLocaleString() }}</div>
           <button @click="deleteInviteCode(code.id)" class="del-invite-btn">删除</button>
         </div>
       </div>
-      <div v-else class="empty-state">暂无邀请码，请点击生成</div>
+      <div v-else class="empty-state">暂无邀请码</div>
+    </div>
+
+    <div v-show="currentTab === 'banner'" class="tab-content">
+      <div class="invite-header-box">
+        <div class="left-box"><h2>🖼️ 首页轮播图设置</h2><p>管理首页顶部的活动海报 (建议尺寸 1920x600)</p></div>
+        <div class="right-actions"><button class="gen-btn" @click="showBannerModal = true">+ 上传新海报</button></div>
+      </div>
+      
+      <div class="banner-list-view">
+        <div v-if="banners.length === 0" class="empty-state">暂无轮播图</div>
+        <div v-else class="banner-grid">
+          <div v-for="b in banners" :key="b.id" class="banner-card">
+            <img :src="b.image_url" class="b-img">
+            <div class="b-info">
+              <div class="b-row title"><strong>{{ b.title || '无标题' }}</strong></div>
+              <div class="b-row desc" v-if="b.description">{{ b.description }}</div>
+              <div class="b-row link">🔗 {{ b.link_url || '无链接' }}</div>
+              <div class="b-row">📊 权重: {{ b.sort_order }}</div>
+            </div>
+            <button @click="deleteBanner(b.id)" class="del-invite-btn">删除</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showBannerModal" class="modal-overlay">
+      <div class="modal-content">
+        <h3>上传轮播图</h3>
+        <div class="form-group">
+          <label>图片文件 (必须)</label>
+          <input type="file" accept="image/*" @change="handleBannerFile">
+          <div v-if="bannerPreview" class="preview-box"><img :src="bannerPreview"></div>
+        </div>
+        
+        <div class="form-group">
+          <label>海报标题 (可选)</label>
+          <input v-model="newBanner.title" placeholder="例如: Miku Expo 10周年" class="std-input">
+        </div>
+
+        <div class="form-group">
+          <label>描述文案 (可选)</label>
+          <textarea v-model="newBanner.description" placeholder="例如: 庆祝初音未来世界巡演十周年..." class="std-input" rows="2"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>跳转链接 (可选)</label>
+          <input v-model="newBanner.link_url" placeholder="/project/123 或 https://..." class="std-input">
+        </div>
+        
+        <div class="form-group">
+          <label>排序权重 (数字越大越靠前)</label>
+          <input v-model="newBanner.sort_order" type="number" class="std-input">
+        </div>
+        
+        <div class="modal-actions">
+          <button @click="showBannerModal = false">取消</button>
+          <button @click="uploadBanner" class="confirm" :disabled="uploadingBanner">
+            {{ uploadingBanner ? '上传中...' : '确认发布' }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <transition name="fade">
@@ -180,24 +228,33 @@ const currentUser = ref(null)
 const currentTab = ref('audit')
 const EVENT_CATEGORIES = ['魔法未来', '雪未来', 'MIKU EXPO', '交响乐会', '演唱会', '联动/咖啡厅', '展览/漫展', '线下活动', '同人企划']
 
-// 数据状态
+// 原有状态
 const items = ref([])
 const pendingItems = ref([]) 
 const pendingProjects = ref([])
 const eventList = ref([])
-const inviteCodes = ref([]) // 邀请码列表
-
+const inviteCodes = ref([])
 const page = ref(0)
 const PAGE_SIZE = 20
 const searchQuery = ref('')
 const eventSearch = ref('')
-
 const showLightbox = ref(false)
 const lightboxImage = ref('')
-
-// 邀请码相关状态
 const isGenerating = ref(false)
 const showUnusedOnly = ref(false)
+
+// 轮播图状态
+const banners = ref([])
+const showBannerModal = ref(false)
+const uploadingBanner = ref(false)
+const bannerFile = ref(null)
+const bannerPreview = ref(null)
+const newBanner = ref({ 
+  link_url: '', 
+  sort_order: 0,
+  title: '',
+  description: '' 
+})
 
 onMounted(async () => {
   const { data: { user } } = await supabase.auth.getUser()
@@ -208,95 +265,67 @@ onMounted(async () => {
     fetchPendingItems()
     fetchEventsOnly()
     fetchPendingProjects()
-    fetchInviteCodes() // 加载邀请码
+    fetchInviteCodes()
+    fetchBanners()
   }
 })
 
-// --- 核心数据获取 ---
-const fetchPendingItems = async () => {
-  const { data } = await supabase.from('items').select('*').eq('status', 'pending').not('category', 'in', `(${EVENT_CATEGORIES.map(c=>`"${c}"`).join(',')})`).order('created_at', { ascending: false })
-  if (data) pendingItems.value = data
+// --- 轮播图逻辑 (更新) ---
+const fetchBanners = async () => {
+  const { data } = await supabase.from('home_banners').select('*').order('sort_order', { ascending: false })
+  banners.value = data || []
 }
-const fetchItems = async () => {
-  let query = supabase.from('items').select('*').not('category', 'in', `(${EVENT_CATEGORIES.map(c=>`"${c}"`).join(',')})`).order('id', { ascending: false }).range(page.value * PAGE_SIZE, (page.value + 1) * PAGE_SIZE - 1)
-  if (searchQuery.value) query = query.ilike('name', `%${searchQuery.value}%`)
-  const { data } = await query; if (data) items.value = data
+const handleBannerFile = (e) => {
+  const file = e.target.files[0]
+  if(file) { bannerFile.value = file; bannerPreview.value = URL.createObjectURL(file) }
 }
-const fetchPendingProjects = async () => {
-  const { data } = await supabase.from('items').select('*').eq('category', '同人企划').eq('status', 'pending').order('created_at', { ascending: false })
-  if (data) pendingProjects.value = data
+const uploadBanner = async () => {
+  if(!bannerFile.value) return alert('请选择图片')
+  uploadingBanner.value = true
+  try {
+    const fileName = `banners/${Date.now()}_${bannerFile.value.name}`
+    await supabase.storage.from('user_uploads').upload(fileName, bannerFile.value)
+    const { data: { publicUrl } } = supabase.storage.from('user_uploads').getPublicUrl(fileName)
+    
+    // 写入所有字段
+    await supabase.from('home_banners').insert({
+      image_url: publicUrl,
+      link_url: newBanner.value.link_url,
+      sort_order: newBanner.value.sort_order,
+      title: newBanner.value.title,
+      description: newBanner.value.description
+    })
+    alert('发布成功')
+    showBannerModal.value = false; bannerFile.value = null; bannerPreview.value = null; 
+    newBanner.value = { link_url: '', sort_order: 0, title: '', description: '' }
+    fetchBanners()
+  } catch(e) { alert('上传失败:'+e.message) } finally { uploadingBanner.value = false }
 }
-const fetchEventsOnly = async () => {
-  let query = supabase.from('items').select('*').in('category', EVENT_CATEGORIES).order('release_date', { ascending: false }).limit(100)
-  if (eventSearch.value) query = query.ilike('name', `%${eventSearch.value}%`)
-  const { data } = await query; if (data) eventList.value = data
-}
-
-// --- 🔑 邀请码逻辑 (新增) ---
-const fetchInviteCodes = async () => {
-  let query = supabase.from('invite_codes').select('*').order('created_at', { ascending: false })
-  if (showUnusedOnly.value) {
-    query = query.eq('is_used', false)
-  }
-  const { data, error } = await query
-  if (data) inviteCodes.value = data
-  else console.error('获取邀请码失败', error)
-}
-
-const generateInviteCode = async () => {
-  isGenerating.value = true
-  // 生成 6 位随机码 (大写字母+数字，排除易混淆字符)
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let code = ''
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  
-  // 写入正确的 invite_codes 表
-  const { error } = await supabase.from('invite_codes').insert([{ code: code, is_used: false }])
-  
-  if (!error) {
-    // 成功后刷新列表
-    await fetchInviteCodes()
-  } else {
-    alert('生成失败: ' + error.message)
-  }
-  isGenerating.value = false
+const deleteBanner = async (id) => {
+  if(!confirm('删除此轮播图？')) return
+  await supabase.from('home_banners').delete().eq('id', id)
+  fetchBanners()
 }
 
-const deleteInviteCode = async (id) => {
-  if (!confirm('确认删除此邀请码？')) return
-  const { error } = await supabase.from('invite_codes').delete().eq('id', id)
-  if (!error) fetchInviteCodes()
-}
-
-// --- 其他操作 ---
-const auditItem = async (id, status, isProject = false) => {
-  if (!confirm('确认操作？')) return
-  await supabase.from('items').update({ status }).eq('id', id)
-  if (isProject) { fetchPendingProjects(); fetchEventsOnly() } else { fetchPendingItems(); fetchItems() }
-}
-const deleteItem = async (id, isEvent = false) => {
-  if (!confirm('⚠️ 彻底删除？')) return
-  await supabase.from('items').delete().eq('id', id)
-  if (isEvent) { fetchEventsOnly(); fetchPendingProjects() } else { fetchItems(); fetchPendingItems() }
-}
-const calcEventStatus = (ev) => {
-  const today = new Date().toISOString().split('T')[0]
-  if (ev.release_date && today < ev.release_date) return { text: '即将开始', class: 'upcoming' }
-  if (ev.event_end_date && today > ev.event_end_date) return { text: '已结束', class: 'ended' }
-  return { text: '进行中', class: 'active' }
-}
+// --- 原有逻辑保留 ---
+const fetchPendingItems = async () => { const { data } = await supabase.from('items').select('*').eq('status', 'pending').not('category', 'in', `(${EVENT_CATEGORIES.map(c=>`"${c}"`).join(',')})`).order('created_at', { ascending: false }); if (data) pendingItems.value = data }
+const fetchItems = async () => { let query = supabase.from('items').select('*').not('category', 'in', `(${EVENT_CATEGORIES.map(c=>`"${c}"`).join(',')})`).order('id', { ascending: false }).range(page.value * PAGE_SIZE, (page.value + 1) * PAGE_SIZE - 1); if (searchQuery.value) query = query.ilike('name', `%${searchQuery.value}%`); const { data } = await query; if (data) items.value = data }
+const fetchPendingProjects = async () => { const { data } = await supabase.from('items').select('*').eq('category', '同人企划').eq('status', 'pending').order('created_at', { ascending: false }); if (data) pendingProjects.value = data }
+const fetchEventsOnly = async () => { let query = supabase.from('items').select('*').in('category', EVENT_CATEGORIES).order('release_date', { ascending: false }).limit(100); if (eventSearch.value) query = query.ilike('name', `%${eventSearch.value}%`); const { data } = await query; if (data) eventList.value = data }
+const fetchInviteCodes = async () => { let query = supabase.from('invite_codes').select('*').order('created_at', { ascending: false }); if (showUnusedOnly.value) query = query.eq('is_used', false); const { data } = await query; if (data) inviteCodes.value = data }
+const generateInviteCode = async () => { isGenerating.value = true; const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let code = ''; for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length)); const { error } = await supabase.from('invite_codes').insert([{ code: code, is_used: false }]); if (!error) await fetchInviteCodes(); else alert('生成失败'); isGenerating.value = false }
+const deleteInviteCode = async (id) => { if (!confirm('删除？')) return; const { error } = await supabase.from('invite_codes').delete().eq('id', id); if (!error) fetchInviteCodes() }
+const auditItem = async (id, status, isProject = false) => { if (!confirm('确认操作？')) return; await supabase.from('items').update({ status }).eq('id', id); if (isProject) { fetchPendingProjects(); fetchEventsOnly() } else { fetchPendingItems(); fetchItems() } }
+const deleteItem = async (id, isEvent = false) => { if (!confirm('⚠️ 彻底删除？')) return; await supabase.from('items').delete().eq('id', id); if (isEvent) { fetchEventsOnly(); fetchPendingProjects() } else { fetchItems(); fetchPendingItems() } }
+const calcEventStatus = (ev) => { const today = new Date().toISOString().split('T')[0]; if (ev.release_date && today < ev.release_date) return { text: '即将开始', class: 'upcoming' }; if (ev.event_end_date && today > ev.event_end_date) return { text: '已结束', class: 'ended' }; return { text: '进行中', class: 'active' } }
 const handleLogout = async () => { await supabase.auth.signOut(); router.push('/login') }
 const openLightbox = (url) => { lightboxImage.value = url; showLightbox.value = true }
 const closeLightbox = () => { showLightbox.value = false }
-watch(currentTab, (newVal) => { 
-  if (newVal === 'events') { fetchEventsOnly(); fetchPendingProjects() }
-  if (newVal === 'invites') { fetchInviteCodes() }
-})
+watch(currentTab, (newVal) => { if (newVal === 'events') { fetchEventsOnly(); fetchPendingProjects() }; if (newVal === 'invites') { fetchInviteCodes() }; if (newVal === 'banner') { fetchBanners() } })
 </script>
 
 <style scoped>
+/* 样式保留 */
 .admin-container { padding: 20px; font-family: sans-serif; background: #f9f9f9; min-height: 100vh; position: relative; }
 .back-home-btn { position: absolute; top: 20px; left: 20px; background: white; border: 1px solid #ddd; padding: 8px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; color: #555; z-index: 10; transition:0.2s;}
 .back-home-btn:hover { background: #39C5BB; color: white; border-color: #39C5BB; }
@@ -308,8 +337,6 @@ watch(currentTab, (newVal) => {
 .header-actions { display: flex; align-items: center; gap: 12px; }
 .admin-badge { background: #673ab7; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; }
 .logout-btn { background: #ff4d4f; color: white; border: none; padding: 6px 15px; border-radius: 4px; cursor: pointer; }
-
-/* 邀请码相关样式 */
 .invites-tab { max-width: 1000px; margin: 0 auto; }
 .invite-header-box { background: white; padding: 20px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
 .invite-header-box h2 { margin: 0 0 5px 0; font-size: 20px; color: #333; }
@@ -330,8 +357,6 @@ watch(currentTab, (newVal) => {
 .del-invite-btn { color: #ff4d4f; border: 1px solid #ffebee; background: white; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: 0.2s; }
 .del-invite-btn:hover { background: #ff4d4f; color: white; }
 .empty-state { text-align: center; color: #999; padding: 40px; }
-
-/* 其他通用样式保持不变 */
 .audit-section { margin-bottom: 30px; }
 .section-header h3 { margin-bottom: 15px; border-left: 5px solid #ff9800; padding-left: 10px; color: #333; }
 .project-audit .section-header h3 { border-left-color: #9c27b0; }
@@ -377,4 +402,16 @@ th { background: #f8f9fa; color: #555; }
 .lightbox-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 3000; display: flex; justify-content: center; align-items: center; }
 .lightbox-img { max-height: 90vh; max-width: 90vw; }
 .lightbox-close-btn { position: absolute; top: 20px; right: 20px; background: none; border: none; color: white; font-size: 30px; cursor: pointer; }
+
+/* 轮播图管理样式 (新增) */
+.banner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; }
+.banner-card { background: white; border: 1px solid #eee; border-radius: 8px; padding: 10px; position: relative; }
+.b-img { width: 100%; height: 100px; object-fit: cover; border-radius: 4px; background: #eee; }
+.b-info { margin: 10px 0; font-size: 13px; color: #666; }
+.b-row { margin-bottom: 4px; }
+.b-row.link { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.b-row.title { font-weight: bold; color: #333; }
+.b-row.desc { color: #888; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-box { margin-top: 10px; }
+.preview-box img { max-width: 100%; max-height: 150px; border-radius: 6px; }
 </style>

@@ -1,19 +1,19 @@
 <script setup>
   import { ref } from 'vue'
   import { useRouter } from 'vue-router'
-  // 👇 修改这里：从 supabase.js 引入，而不是就地创建
   import { supabase } from '../supabase' 
   
   const router = useRouter()
-  // const supabase = createClient(...)  <-- 这一行删除
   
-  // ... (其余代码保持不变)
   const username = ref('')
   const email = ref('')
   const password = ref('')
   const inviteCode = ref('')
   const loading = ref(false)
   const errorMsg = ref('')
+  
+  // 新增：控制密码是否可见
+  const showPassword = ref(false)
   
   const handleRegister = async () => {
     loading.value = true
@@ -29,7 +29,7 @@
         options: {
           data: {
             username: username.value.trim(),
-            invite_code: inviteCode.value.trim() // 确保这里的变量名是 inviteCode
+            invite_code: inviteCode.value.trim() 
           }
         }
       })
@@ -41,15 +41,14 @@
   
     } catch (err) {
       console.error(err)
-      // 如果是数据库抛出的错误，显示给用户
       errorMsg.value = err.message.replace('Database error saving new user', '验证失败')
     } finally {
       loading.value = false
     }
   }
-  </script>
+</script>
   
-  <template>
+<template>
     <div class="auth-container">
         <div class="auth-box">
           <h2>🚀 申请内测资格</h2>
@@ -68,7 +67,21 @@
             
             <div class="input-group">
               <label>密码</label>
-              <input v-model="password" type="password" placeholder="至少6位" required />
+              <div class="password-wrapper">
+                <input 
+                  v-model="password" 
+                  :type="showPassword ? 'text' : 'password'" 
+                  placeholder="至少6位" 
+                  required 
+                />
+                <span 
+                  class="eye-btn" 
+                  @click="showPassword = !showPassword"
+                  :title="showPassword ? '隐藏密码' : '显示密码'"
+                >
+                  {{ showPassword ? '👀' : '🙈' }}
+                </span>
+              </div>
             </div>
     
             <div class="input-group">
@@ -88,9 +101,9 @@
           </div>
         </div>
       </div>
-  </template>
+</template>
   
-  <style scoped>
+<style scoped>
     .auth-container { height: 100vh; display: flex; justify-content: center; align-items: center; background: #f0f9f9; }
     .auth-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 8px 30px rgba(57, 197, 187, 0.15); width: 100%; max-width: 400px; }
     h2 { color: #39C5BB; text-align: center; margin: 0 0 10px 0; }
@@ -99,6 +112,22 @@
     .input-group label { display: block; font-size: 12px; color: #333; margin-bottom: 5px; font-weight: bold; }
     input { width: 100%; padding: 12px; border: 2px solid #eee; border-radius: 8px; box-sizing: border-box; transition: 0.3s; }
     input:focus { border-color: #39C5BB; outline: none; }
+    
+    /* 密码框相关样式 */
+    .password-wrapper { position: relative; }
+    .eye-btn {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        cursor: pointer;
+        font-size: 18px;
+        user-select: none;
+        opacity: 0.6;
+        transition: 0.2s;
+    }
+    .eye-btn:hover { opacity: 1; }
+
     .code-input { letter-spacing: 2px; font-family: monospace; font-weight: bold; color: #39C5BB; }
     .submit-btn { width: 100%; padding: 12px; background: #39C5BB; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; transition: 0.2s; }
     .submit-btn:hover:not(:disabled) { background: #2da8a0; transform: translateY(-2px); }
@@ -106,4 +135,4 @@
     .error-box { background: #ffebee; color: #c62828; padding: 10px; border-radius: 6px; margin-top: 20px; font-size: 13px; text-align: center; }
     .footer-link { text-align: center; margin-top: 20px; font-size: 14px; color: #666; }
     .footer-link a { color: #39C5BB; text-decoration: none; font-weight: bold; }
-  </style>
+</style>
