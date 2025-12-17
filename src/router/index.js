@@ -1,36 +1,80 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { supabase } from '../supabase'
 
-// 引入所有组件
+// 🔥 严格按照你截图中的文件名引入
 import HomeView from '../views/HomeView.vue'
-import WikiView from '../views/WikiView.vue' // 新增的资料库页面
-import ProjectsView from '../views/ProjectsView.vue'
-import ProjectDetail from '../views/ProjectDetail.vue'
-import ItemDetail from '../views/ItemDetail.vue'
+import WikiView from '../views/WikiView.vue'
+import EventsView from '../views/EventsView.vue'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
+import ItemDetail from '../views/ItemDetail.vue'
+import ProjectDetail from '../views/ProjectDetail.vue'
+
+// 后台与个人中心 (对应截图中的 UserDashboard 和 AdminDashboard)
+import UserDashboard from '../views/UserDashboard.vue' 
 import AdminDashboard from '../views/AdminDashboard.vue'
-import UserDashboard from '../views/UserDashboard.vue'
+
+// 投稿与企划
+// 注意：截图里有 Projects.vue 也有 ProjectsView.vue，这里我指向 Projects.vue (通常是新版)
+import ProjectsView from '../views/Projects.vue' 
+// 截图里有 SubmitWork.vue，这里对应“周边投稿”
 import SubmitWork from '../views/SubmitWork.vue'
-import EventsView from '../views/WikiView.vue'
+// 截图里有 SubmitProject.vue，这里对应“发布企划”
+import SubmitProject from '../views/SubmitProject.vue' 
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/', name: 'home', component: HomeView },
+    { 
+      path: '/', 
+      name: 'home', 
+      component: HomeView 
+    },
+    { 
+      path: '/wiki', 
+      name: 'wiki', 
+      component: WikiView 
+    },
+    { 
+      path: '/events', 
+      name: 'events', 
+      component: EventsView 
+    },
+    { 
+      path: '/projects', 
+      name: 'projects', 
+      component: ProjectsView 
+    },
+    { 
+      path: '/submit-project', 
+      name: 'submit-project', 
+      component: SubmitProject, 
+      meta: { requiresAuth: true } 
+    },
+    { 
+      path: '/submit', 
+      name: 'submit', 
+      component: SubmitWork, 
+      meta: { requiresAuth: true } 
+    },
+    { 
+      path: '/profile', 
+      name: 'profile', 
+      component: UserDashboard, 
+      meta: { requiresAuth: true } 
+    },
+    { 
+      path: '/admin', 
+      name: 'admin', 
+      component: AdminDashboard, 
+      meta: { requiresAuth: true } 
+    },
     
-    // 把原来的首页功能移到了这里
-    { path: '/wiki', name: 'wiki', component: WikiView },
-
-    { path: '/projects', name: 'projects', component: ProjectsView },
-    { path: '/project/:id', name: 'project-detail', component: ProjectDetail, props: true },
-    { path: '/item/:id', name: 'item-detail', component: ItemDetail },
+    // 登录注册及详情页
     { path: '/login', name: 'login', component: LoginView },
     { path: '/register', name: 'register', component: RegisterView },
-    { path: '/profile', name: 'profile', component: UserDashboard, meta: { requiresAuth: true } },
-    { path: '/admin', name: 'admin', component: AdminDashboard, meta: { requiresAuth: true } },
-    { path: '/submit', name: 'submit', component: SubmitWork, meta: { requiresAuth: true } },
-    { path: '/events', name: 'events', component: () => import('../views/EventsView.vue') },
+    { path: '/project/:id', name: 'project-detail', component: ProjectDetail, props: true },
+    { path: '/item/:id', name: 'item-detail', component: ItemDetail }
   ],
   scrollBehavior(to, from, savedPosition) {
     return savedPosition || { top: 0 }
