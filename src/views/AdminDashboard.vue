@@ -46,11 +46,26 @@
               <span class="mini-type-tag" :class="item.is_fan_work ? 'fan' : 'off'">{{ item.is_fan_work ? '同人' : '官方' }}</span>
             </div>
             <div class="audit-info">
-              <h4>#{{ item.id }} {{ item.name }}</h4>
+              <h4 class="card-title">#{{ item.id }} {{ item.name }}</h4>
+              
               <div class="tags-row">
                 <span class="mini-tag cat">{{ item.category }}</span>
                 <span v-if="item.is_ai" class="mini-tag ai">🤖 AI</span>
               </div>
+
+              <div class="meta-info-box">
+                <div class="meta-row">
+                  <span class="meta-label">📅 提交:</span> 
+                  <span class="meta-val">{{ formatTime(item.created_at) }}</span>
+                </div>
+                <div class="meta-row">
+                  <span class="meta-label">👤 来源:</span>
+                  <span class="meta-val user-id" :title="item.user_id">
+                    {{ item.user_id ? item.user_id.slice(0, 8)+'...' : '未知/爬虫' }}
+                  </span>
+                </div>
+              </div>
+
               <div class="audit-actions">
                 <button @click="auditItem(item.id, 'approved')" class="approve-btn">✅ 通过</button>
                 <button @click="auditItem(item.id, 'rejected')" class="reject-btn">❌ 驳回</button>
@@ -71,7 +86,7 @@
             <tr>
               <th width="50">ID</th>
               <th width="60">图</th>
-              <th>名称</th>
+              <th>名称 (点击跳转详情)</th>
               <th width="80">状态</th>
               <th width="100">分类</th>
               <th width="80">价格</th>
@@ -84,7 +99,9 @@
               <td><img :src="item.image_url" class="mini-thumb zoom-cursor" @click="openLightbox(item.image_url)" /></td>
               <td>
                 <input v-if="editingId === item.id" v-model="editForm.name" class="edit-input" />
-                <a v-else :href="item.link" target="_blank" class="item-link">{{ item.name }}</a>
+                <span v-else class="internal-link" @click="goToDetail(item.id)">
+                  {{ item.name }}
+                </span>
               </td>
               <td><span class="status-badge" :class="item.status">{{ item.status || 'approved' }}</span></td>
               <td>
@@ -249,27 +266,22 @@ import { useRouter } from 'vue-router'
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY)
 const router = useRouter()
 
-// 核心状态
 const currentUser = ref(null)
-const currentTab = ref('audit') // 'audit' | 'events'
+const currentTab = ref('audit')
 const EVENT_CATEGORIES = ['魔法未来', '雪未来', 'MIKU EXPO', '交响乐会', '演唱会', '联动/咖啡厅', '展览/漫展', '线下活动']
 
-// 列表数据
 const items = ref([])
 const pendingItems = ref([])
-const eventList = ref([]) // 专门存活动数据
+const eventList = ref([]) 
 
-// 分页与搜索
 const page = ref(0)
 const PAGE_SIZE = 20
 const searchQuery = ref('')
 const eventSearch = ref('')
 
-// 编辑状态 (通用)
 const editingId = ref(null)
 const editForm = ref({})
 
-// 弹窗状态 (活动)
 const showEventModal = ref(false)
 const isEditingEvent = ref(false)
 const eventForm = reactive({
@@ -277,7 +289,6 @@ const eventForm = reactive({
   release_date: '', event_end_date: '', image_url: '', link: '', external_link: ''
 })
 
-// 灯箱
 const showLightbox = ref(false)
 const lightboxImage = ref('')
 
@@ -292,27 +303,50 @@ onMounted(async () => {
   }
 })
 
-// --- 通用逻辑 ---
-const handleLogout = async () => { await supabase.auth.signOut(); router.push('/login') }
-const openLightbox = (url) => { lightboxImage.value = url; showLightbox.value = true; document.body.style.overflow = 'hidden' }
-const closeLightbox = () => { showLightbox.value = false; lightboxImage.value = ''; document.body.style.overflow = 'auto' }
-onUnmounted(() => { document.body.style.overflow = 'auto' })
+// --- 辅助函数 ---
 
-// --- Tab 1: 审核 & 全站逻辑 ---
+// 🔥 修正：跳转到 /item/ID
+const goToDetail = (id) => {
+  router.push(`/item/${id}`)
+}
+
+const formatTime = (iso) => {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${d.getMinutes().toString().padStart(2,'0')}`
+}
+
+// --- Tab 1 逻辑 ---
+
 const fetchPendingItems = async () => {
-  const { data } = await supabase.from('items').select('*').eq('status', 'pending').order('created_at', { ascending: false })
+  const { data } = await supabase
+    .from('items')
+    .select('*, profiles:user_id(username)')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+  
   if (data) pendingItems.value = data
 }
+
 const auditItem = async (id, status) => {
-  if (!confirm('确定操作?')) return
+  if (!confirm(status === 'approved' ? '确认通过？' : '确认驳回？')) return
   await supabase.from('items').update({ status }).eq('id', id)
-  fetchPendingItems(); fetchItems()
+  fetchPendingItems()
+  fetchItems()
 }
+
 const fetchItems = async () => {
-  let query = supabase.from('items').select('*').order('id', { ascending: false }).range(page.value * PAGE_SIZE, (page.value + 1) * PAGE_SIZE - 1)
+  let query = supabase.from('items')
+    .select('*')
+    .order('id', { ascending: false })
+    .range(page.value * PAGE_SIZE, (page.value + 1) * PAGE_SIZE - 1)
+  
   if (searchQuery.value) query = query.ilike('name', `%${searchQuery.value}%`)
-  const { data } = await query; if (data) items.value = data
+  
+  const { data } = await query
+  if (data) items.value = data
 }
+
 const startEdit = (item) => { editingId.value = item.id; editForm.value = { ...item } }
 const cancelEdit = () => { editingId.value = null; editForm.value = {} }
 const saveEdit = async (id) => {
@@ -321,23 +355,22 @@ const saveEdit = async (id) => {
   }).eq('id', id)
   if (!error) { editingId.value = null; fetchItems() } else alert('保存失败')
 }
+
 const deleteItem = async (id, isEvent = false) => {
   if (!confirm('⚠️ 彻底删除？不可恢复')) return
   await supabase.from('items').delete().eq('id', id)
   if (isEvent) fetchEventsOnly(); else fetchItems()
 }
 
-// --- Tab 2: 活动管理逻辑 ---
+// --- Tab 2: 活动逻辑 ---
 const fetchEventsOnly = async () => {
   let query = supabase.from('items').select('*').in('category', EVENT_CATEGORIES).order('release_date', { ascending: false })
   if (eventSearch.value) query = query.ilike('name', `%${eventSearch.value}%`)
-  // 这里暂时不分页，取前100条方便管理，或者你可以加分页
   query = query.limit(100)
   const { data } = await query
   if (data) eventList.value = data
 }
 
-// 计算活动状态
 const calcEventStatus = (ev) => {
   const today = new Date().toISOString().split('T')[0]
   if (ev.release_date && today < ev.release_date) return { text: '📅 即将开始', class: 'upcoming' }
@@ -345,7 +378,6 @@ const calcEventStatus = (ev) => {
   return { text: '🟢 进行中', class: 'active' }
 }
 
-// 打开弹窗
 const openEventModal = (ev = null) => {
   showEventModal.value = true
   if (ev) {
@@ -353,7 +385,6 @@ const openEventModal = (ev = null) => {
     Object.assign(eventForm, ev)
   } else {
     isEditingEvent.value = false
-    // 重置表单
     Object.assign(eventForm, {
       id: null, name: '', category: '线下活动', character: '全员/混合',
       release_date: new Date().toISOString().split('T')[0], 
@@ -362,49 +393,36 @@ const openEventModal = (ev = null) => {
   }
 }
 
-// 保存活动 (新增或修改)
 const saveEvent = async () => {
   if (!eventForm.name || !eventForm.release_date) return alert('名称和开始日期必填')
   
   const payload = {
-    name: eventForm.name,
-    category: eventForm.category,
-    character: eventForm.character,
-    release_date: eventForm.release_date,
-    event_end_date: eventForm.event_end_date || null,
-    image_url: eventForm.image_url,
-    link: eventForm.link,
-    external_link: eventForm.external_link,
-    // 默认字段
-    status: 'approved',
-    author: '官方/管理员',
-    is_ai: false
+    name: eventForm.name, category: eventForm.category, character: eventForm.character,
+    release_date: eventForm.release_date, event_end_date: eventForm.event_end_date || null,
+    image_url: eventForm.image_url, link: eventForm.link, external_link: eventForm.external_link,
+    status: 'approved', author: '官方/管理员', is_ai: false
   }
 
   let error = null
   if (isEditingEvent.value) {
-    // 更新
     const res = await supabase.from('items').update(payload).eq('id', eventForm.id)
     error = res.error
   } else {
-    // 新增
     const res = await supabase.from('items').insert([payload])
     error = res.error
   }
 
-  if (error) {
-    alert('保存失败: ' + error.message)
-  } else {
-    alert('✅ 保存成功')
-    showEventModal.value = false
-    fetchEventsOnly()
+  if (error) alert('保存失败: ' + error.message)
+  else {
+    alert('✅ 保存成功'); showEventModal.value = false; fetchEventsOnly()
   }
 }
 
-// 监听 Tab 切换
-watch(currentTab, (newVal) => {
-  if (newVal === 'events') fetchEventsOnly()
-})
+const handleLogout = async () => { await supabase.auth.signOut(); router.push('/login') }
+const openLightbox = (url) => { lightboxImage.value = url; showLightbox.value = true; document.body.style.overflow = 'hidden' }
+const closeLightbox = () => { showLightbox.value = false; lightboxImage.value = ''; document.body.style.overflow = 'auto' }
+onUnmounted(() => { document.body.style.overflow = 'auto' })
+watch(currentTab, (newVal) => { if (newVal === 'events') fetchEventsOnly() })
 </script>
 
 <style scoped>
@@ -412,81 +430,82 @@ watch(currentTab, (newVal) => {
 .back-home-btn { position: absolute; top: 20px; left: 20px; background: white; border: 1px solid #ddd; padding: 8px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; color: #555; z-index: 10; transition:0.2s;}
 .back-home-btn:hover { background: #39C5BB; color: white; border-color: #39C5BB; }
 
-/* Header & Tabs */
+/* Header */
 .admin-header { display: flex; justify-content: space-between; align-items: center; margin-top: 50px; margin-bottom: 20px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
 .header-left h1 { margin: 0 0 15px 0; font-size: 24px; color: #2c3e50; }
 .admin-tabs { display: flex; gap: 10px; }
 .nav-tab { padding: 10px 20px; border: none; background: #f0f2f5; border-radius: 8px; cursor: pointer; font-weight: bold; color: #666; transition: 0.2s; }
 .nav-tab.active { background: #39C5BB; color: white; box-shadow: 0 4px 10px rgba(57, 197, 187, 0.3); }
-
 .header-actions { display: flex; align-items: center; gap: 12px; }
 .admin-badge { background: #673ab7; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; }
 .logout-btn { background: #ff4d4f; color: white; border: none; padding: 6px 15px; border-radius: 4px; cursor: pointer; }
 
-/* Toolbar */
-.toolbar { display: flex; gap: 10px; margin-bottom: 15px; }
-.event-toolbar { justify-content: space-between; }
-.left-tools { display: flex; gap: 10px; }
-.search-input { padding: 10px; border: 1px solid #ddd; border-radius: 6px; width: 300px; }
-.refresh-btn { background: #fff; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; padding: 0 15px; }
-.add-btn { background: #2e7d32; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(46, 125, 50, 0.2); }
-.add-btn:hover { background: #1b5e20; }
+/* Audit Section */
+.audit-section { margin-bottom: 30px; }
+.section-header h3 { margin-bottom: 15px; border-left: 5px solid #ff9800; padding-left: 10px; color: #333; }
+.audit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px; }
+.audit-card { background: white; border: 1px solid #ffcc80; border-radius: 8px; display: flex; overflow: hidden; height: 160px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+.img-box-wrapper { width: 110px; position: relative; background: #eee; flex-shrink: 0; }
+.audit-img { width: 100%; height: 100%; object-fit: cover; }
+.mini-type-tag { position: absolute; bottom: 0; width: 100%; text-align: center; color: white; font-size: 10px; padding: 2px 0; }
+.mini-type-tag.fan { background: #e91e63; }
+.mini-type-tag.off { background: #2196f3; }
 
-/* Table */
+.audit-info { padding: 10px; flex: 1; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
+.card-title { margin: 0 0 5px 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tags-row { display: flex; gap: 5px; margin-bottom: 8px; }
+.mini-tag { font-size: 10px; padding: 2px 5px; border-radius: 3px; border: 1px solid #eee; }
+.mini-tag.cat { background: #f5f5f5; color: #666; }
+.mini-tag.ai { background: black; color: white; }
+
+/* Meta Info Box */
+.meta-info-box { background: #fafafa; border: 1px dashed #ddd; border-radius: 4px; padding: 5px; font-size: 11px; color: #666; margin-bottom: 5px; }
+.meta-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+.meta-label { color: #999; }
+.meta-val { font-family: monospace; color: #333; }
+.user-id { background: #eee; padding: 0 4px; border-radius: 3px; }
+
+.audit-actions { display: flex; gap: 8px; }
+.approve-btn, .reject-btn { flex: 1; border: none; padding: 6px; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; font-size: 12px; }
+.approve-btn { background: #4caf50; }
+.reject-btn { background: #f44336; }
+
+/* Table & Links */
+.internal-link { color: #1565c0; cursor: pointer; font-weight: bold; transition: 0.2s; }
+.internal-link:hover { color: #39C5BB; text-decoration: underline; }
 .table-wrapper { background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
 th { background: #f8f9fa; color: #555; }
 .mini-thumb { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; }
-.bold-text { font-weight: bold; color: #333; }
-.date-col { font-family: monospace; color: #555; }
-.missing { color: #ccc; font-style: italic; }
+.status-badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+.status-badge.approved { background: #e8f5e9; color: #2e7d32; }
+.status-badge.pending { background: #fff3e0; color: #ef6c00; }
 
-/* Status Pills */
+/* Common UI */
+.toolbar { display: flex; gap: 10px; margin-bottom: 15px; }
+.event-toolbar { justify-content: space-between; }
+.search-input { padding: 10px; border: 1px solid #ddd; border-radius: 6px; width: 300px; }
+.refresh-btn, .edit-btn, .del-btn, .save-btn, .cancel-btn { padding: 5px 10px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; }
+.del-btn, .cancel-btn { color: red; border-color: #ffcdd2; }
+.add-btn { background: #2e7d32; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; }
 .status-pill { padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; }
-.status-pill.upcoming { background: #fff3e0; color: #ef6c00; }
 .status-pill.active { background: #e0f2f1; color: #00695c; }
 .status-pill.ended { background: #eee; color: #999; }
+.pagination { margin-top: 20px; text-align: center; }
+.pagination button { padding: 5px 15px; margin: 0 5px; }
 
-/* Audit Cards (Tab 1) */
-.audit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; margin-bottom: 20px; }
-.audit-card { background: white; border: 1px solid #ffe0b2; border-radius: 8px; display: flex; overflow: hidden; }
-.img-box-wrapper { width: 100px; position: relative; }
-.audit-img { width: 100%; height: 100%; object-fit: cover; }
-.audit-info { padding: 10px; flex: 1; display: flex; flex-direction: column; }
-.audit-actions { margin-top: auto; display: flex; gap: 5px; }
-.approve-btn { flex: 1; background: #4caf50; color: white; border:none; padding: 5px; border-radius: 4px; cursor: pointer; }
-.reject-btn { flex: 1; background: #f44336; color: white; border:none; padding: 5px; border-radius: 4px; cursor: pointer; }
-
-/* Modal */
+/* Modal & Lightbox */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; display: flex; justify-content: center; align-items: center; }
-.modal-box { background: white; width: 500px; padding: 30px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-.modal-box h3 { margin-top: 0; color: #333; }
+.modal-box { background: white; width: 500px; padding: 30px; border-radius: 12px; }
 .form-row { margin-bottom: 15px; }
 .form-row.half { display: flex; gap: 15px; }
 .form-row.half > div { flex: 1; }
-.form-row label { display: block; font-weight: bold; font-size: 13px; margin-bottom: 5px; color: #555; }
 .form-row input, .form-row select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
-.hint-small { font-size: 11px; color: #999; display: block; margin-top: 2px; }
-.preview-box { margin-top: 10px; height: 100px; background: #eee; display: flex; justify-content: center; overflow: hidden; border-radius: 6px; }
-.preview-box img { height: 100%; object-fit: contain; }
-
 .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
-.save-btn-lg { flex: 2; background: #39C5BB; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; }
+.save-btn-lg { flex: 2; background: #39C5BB; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; }
 .cancel-btn-lg { flex: 1; background: #eee; color: #666; border: none; padding: 12px; border-radius: 6px; cursor: pointer; }
-
-/* Lightbox */
 .lightbox-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 3000; display: flex; justify-content: center; align-items: center; }
 .lightbox-img { max-height: 90vh; max-width: 90vw; }
 .lightbox-close-btn { position: absolute; top: 20px; right: 20px; background: none; border: none; color: white; font-size: 30px; cursor: pointer; }
-
-/* Misc */
-.edit-input { width: 100%; padding: 4px; box-sizing: border-box; }
-.badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; }
-.cat { background: #e3f2fd; color: #1565c0; }
-.price { color: #d32f2f; font-weight: bold; font-family: monospace; }
-.edit-btn, .del-btn { padding: 4px 8px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; }
-.del-btn { color: red; border-color: red; }
-.pagination { margin-top: 20px; text-align: center; }
-.pagination button { padding: 5px 15px; margin: 0 5px; }
 </style>
