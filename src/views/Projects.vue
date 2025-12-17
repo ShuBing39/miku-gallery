@@ -1,166 +1,153 @@
 <template>
-    <div class="projects-container">
-      <button class="back-home-btn" @click="$router.push('/')">⬅ 返回首页</button>
-  
-      <div class="header-section">
-        <h1 class="main-title">🤝 企划大厅</h1>
-        <p class="sub-title">加入同人创作，为爱发电</p>
-        
-        <button class="create-project-btn" @click="$router.push('/submit-project')">
-          ➕ 发起新企划
-        </button>
+  <div class="projects-hall">
+    <div class="hall-header">
+      <h1>🤝 企划大厅</h1>
+      <p>加入同人创作，为爱发电</p>
+      
+      <div class="actions">
+        <div class="search-bar">
+          <input v-model="searchText" placeholder="搜索企划..." @keyup.enter="fetchProjects" />
+          <button @click="fetchProjects">🔍</button>
+        </div>
+        <button class="btn-create" @click="handleCreateClick">+ 发起新企划</button>
       </div>
-  
-      <div class="private-access-bar">
-        <input v-model="inviteCodeInput" placeholder="输入邀请码..." maxlength="6" />
-        <button @click="handleManualSearch">🔍 查找企划</button>
-      </div>
-  
-      <div class="projects-grid">
-        <div v-for="item in projects" :key="item.id" class="project-card" @click="openLink(item)">
-          <div class="img-wrapper">
-            <img :src="item.image_url" referrerpolicy="no-referrer" @error="handleImgError" />
-            <div class="status-overlay" :class="getTimeStatus(item).class">{{ getTimeStatus(item).text }}</div>
-            <div v-if="item.is_private" class="private-badge">🔒 私密</div>
+    </div>
+
+    <div v-if="loading" class="loading-box">
+      <div class="spinner"></div>
+      <p>正在加载企划...</p>
+    </div>
+
+    <div v-else-if="projects.length > 0" class="projects-grid">
+      <div 
+        v-for="p in projects" 
+        :key="p.id" 
+        class="project-card" 
+        @click="goToDetail(p.id)"
+      >
+        <div class="card-cover" :style="p.image_url ? { backgroundImage: `url(${p.image_url})` } : { backgroundColor: '#ddd' }">
+          <span class="status-tag" :class="p.recruit_status">
+            {{ getStatusText(p.recruit_status) }}
+          </span>
+          <div class="view-count-badge">
+            🔥 {{ p.view_count || 0 }}
           </div>
-          <div class="info-content">
-            <h3 class="title">{{ item.name }}</h3>
-            <div class="meta-row">
-              <span class="author">发起: {{ item.author }}</span>
-            </div>
-            <div class="time-info" v-if="item.end_date">
-              <div class="progress-bar"><div class="progress-fill" :style="{ width: calcProgress(item) + '%' }"></div></div>
-              <div class="dates"><span>截止: {{ formatDate(item.end_date) }}</span></div>
-            </div>
+        </div>
+        
+        <div class="card-body">
+          <div class="card-tags">
+            <span class="type-tag">{{ p.project_type || '综合' }}</span>
+          </div>
+          <h3 class="card-title">{{ p.name }}</h3>
+          <p class="card-desc">{{ p.description ? p.description.slice(0, 40) + '...' : '暂无描述' }}</p>
+          
+          <div class="card-footer">
+            <span class="author">
+              👤 {{ p.uploader_name || '未知' }}
+            </span>
+            <span class="time">{{ formatDate(p.created_at) }}</span>
           </div>
         </div>
       </div>
-      
-      <div v-if="projects.length === 0 && !loading" class="empty-state">暂无公开企划</div>
-  
-      <div v-if="loading" class="loading-state">加载中...</div>
-  
     </div>
-  </template>
+
+    <div v-else class="empty-state">
+      <p>🍃 暂时没有符合条件的企划</p>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { supabase } from '../supabase'
+
+const router = useRouter()
+const projects = ref([])
+const loading = ref(true)
+const searchText = ref('')
+
+onMounted(() => {
+  fetchProjects()
+})
+
+const handleCreateClick = () => {
+  router.push('/submit-project')
+}
+
+const fetchProjects = async () => {
+  loading.value = true
   
-  <script setup>
-  import { ref, onMounted } from 'vue'
-  import { createClient } from '@supabase/supabase-js'
-  import { useRoute, useRouter } from 'vue-router'
-  
-  const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY)
-  const route = useRoute()
-  const router = useRouter()
-  
-  const projects = ref([])
-  const loading = ref(true)
-  const inviteCodeInput = ref('')
-  
-  onMounted(async () => {
-    await fetchProjects()
-    // 处理URL带来的邀请码
-    if (route.query.code) {
-      inviteCodeInput.value = route.query.code
-      handleManualSearch()
-      router.replace('/projects') // 清除URL参数
-    }
-  })
-  
-  const fetchProjects = async () => {
-    loading.value = true
-    const today = new Date().toISOString().split('T')[0]
-    const { data } = await supabase
-      .from('items')
-      .select('*')
-      .eq('category', '同人企划') // 只筛选企划
-      .eq('status', 'approved')
-      .order('created_at', { ascending: false })
-  
-    if (data) {
-      // 逻辑：公开的直接显示；私密的只有已过期的才偶尔显示(或者完全不显示)，这里保留你原本逻辑
-      projects.value = data.filter(p => !p.is_private || (p.is_private && p.end_date && p.end_date < today))
-    }
-    loading.value = false
+  let query = supabase
+    .from('projects')
+    .select('*, profiles(username)')
+    .order('created_at', { ascending: false })
+
+  if (searchText.value) {
+    query = query.ilike('name', `%${searchText.value}%`)
   }
-  
-  const handleManualSearch = async () => {
-    if(!inviteCodeInput.value) return alert('请输入邀请码')
-    
-    // 1. 查邀请码表找 project_id (假设你有 project_invites 表)
-    // 如果没有这张表，你可以根据需求修改，或者直接跳过这一步用 ID 查
-    // 这里暂时假设通过邀请码能查到 project_id
-    const { data: inv } = await supabase.from('project_invites').select('project_id').eq('code', inviteCodeInput.value.toUpperCase()).single()
-    
-    // 如果没查到邀请码，或者表不存在，这里会报错。
-    // 为了稳健，如果报错，尝试直接用 ID 查 (假设输入的是 ID) 或者提示无效
-    if (!inv) return alert('无效的邀请码')
-    
-    // 2. 查企划详情
-    const { data: p } = await supabase.from('items').select('*').eq('id', inv.project_id).single()
-    
-    if (p) {
-      // 3. 直接跳转到详情页！(比加入列表更直观)
-      router.push(`/project/${p.id}`)
-    } else {
-      alert('未找到对应企划')
-    }
+
+  const { data, error } = await query
+
+  if (error) {
+    console.error('加载失败:', error)
+  } else {
+    projects.value = data.map(p => ({
+      ...p,
+      uploader_name: p.profiles?.username || '未知用户'
+    }))
   }
-  
-  // 核心跳转函数
-  const openLink = (item) => {
-    // 跳转到我们在 router 里定义的详情页路由
-    router.push(`/project/${item.id}`)
-  }
-  
-  // 辅助函数
-  const getTimeStatus = (item) => {
-    if (!item.end_date) return { text: '长期', class: 'long' }
-    const today = new Date().toISOString().split('T')[0]
-    return today > item.end_date ? { text: '已结束', class: 'ended' } : { text: '进行中', class: 'active' }
-  }
-  const calcProgress = (item) => {
-    if(!item.start_date || !item.end_date) return 0
-    const total = new Date(item.end_date) - new Date(item.start_date)
-    const pass = new Date() - new Date(item.start_date)
-    return Math.min(Math.max((pass/total)*100, 0), 100)
-  }
-  const formatDate = (d) => d ? d.replace(/-/g, '/') : ''
-  const handleImgError = (e) => { e.target.src = 'https://via.placeholder.com/300x200?text=Project' }
-  </script>
-  
-  <style scoped>
-  .projects-container { max-width: 1000px; margin: 0 auto; padding: 20px; font-family: sans-serif; position: relative; }
-  .back-home-btn { position: absolute; top: 20px; left: 0; background: white; border: 1px solid #ddd; padding: 6px 12px; border-radius: 20px; cursor: pointer; color: #666; font-weight: bold; }
-  
-  .header-section { text-align: center; margin: 40px 0 30px 0; position: relative; }
-  .main-title { color: #2c3e50; margin: 0; font-size: 2.2rem; }
-  .sub-title { color: #888; margin-top: 5px; }
-  
-  .create-project-btn { background: linear-gradient(135deg, #39C5BB, #26a69a); color: white; border: none; padding: 12px 30px; border-radius: 30px; font-weight: bold; cursor: pointer; margin-top: 15px; box-shadow: 0 4px 15px rgba(57, 197, 187, 0.3); transition: 0.2s; font-size: 16px; }
-  .create-project-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(57, 197, 187, 0.4); }
-  
-  .private-access-bar { display: flex; justify-content: center; gap: 10px; margin-bottom: 40px; }
-  .private-access-bar input { padding: 10px; width: 200px; border: 2px solid #ddd; border-radius: 25px; text-align: center; font-weight: bold; outline: none; }
-  .private-access-bar input:focus { border-color: #39C5BB; }
-  .private-access-bar button { background: #333; color: white; border: none; padding: 10px 20px; border-radius: 25px; cursor: pointer; }
-  
-  .projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; }
-  .project-card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); cursor: pointer; transition: 0.3s; border: 1px solid #eee; display: flex; flex-direction: column; }
-  .project-card:hover { transform: translateY(-5px); border-color: #39C5BB; }
-  .img-wrapper { height: 160px; position: relative; background: #f5f5f5; }
-  .img-wrapper img { width: 100%; height: 100%; object-fit: cover; }
-  .status-overlay { position: absolute; top: 10px; right: 10px; padding: 4px 10px; border-radius: 20px; color: white; font-size: 12px; font-weight: bold; }
-  .status-overlay.active { background: #ff5722; }
-  .status-overlay.ended { background: #9e9e9e; }
-  .status-overlay.long { background: #4caf50; }
-  .private-badge { position: absolute; top: 10px; left: 10px; background: #333; color: gold; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
-  .info-content { padding: 15px; flex: 1; display: flex; flex-direction: column; }
-  .title { margin: 0 0 10px 0; font-size: 16px; color: #333; }
-  .author { font-size: 12px; color: #888; margin-bottom: 10px; }
-  .time-info { margin-top: auto; }
-  .progress-bar { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; margin-bottom: 6px; }
-  .progress-fill { height: 100%; background: #39C5BB; }
-  .dates { font-size: 11px; color: #999; text-align: right; }
-  .empty-state { text-align: center; padding: 50px; color: #aaa; }
-  .loading-state { text-align: center; padding: 50px; color: #999; }
-  </style>
+  loading.value = false
+}
+
+const goToDetail = async (id) => {
+  // 🔥 新增：点击时增加浏览量
+  await supabase.rpc('increment_project_view', { row_id: id })
+  router.push(`/project/${id}`)
+}
+
+const formatDate = (iso) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return `${d.getMonth() + 1}-${d.getDate()}`
+}
+
+const getStatusText = (s) => {
+  if (s === 'recruiting') return '招募中'
+  if (s === 'ongoing') return '进行中'
+  return '已结束'
+}
+</script>
+
+<style scoped>
+/* 保持原有样式，新增 view-count-badge */
+.projects-hall { max-width: 1200px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', sans-serif; }
+.hall-header { text-align: center; margin-bottom: 40px; padding: 40px 0; background: linear-gradient(to right, #e0f7fa, #f3e5f5); border-radius: 16px; }
+.hall-header h1 { margin: 0 0 10px; color: #333; font-size: 32px; }
+.hall-header p { color: #666; margin-bottom: 25px; }
+.actions { display: flex; justify-content: center; gap: 15px; }
+.search-bar { display: flex; background: white; padding: 5px; border-radius: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+.search-bar input { border: none; padding: 10px 15px; outline: none; width: 200px; font-size: 14px; }
+.search-bar button { border: none; background: none; cursor: pointer; padding: 0 15px; font-size: 18px; }
+.btn-create { background: #39C5BB; color: white; border: none; padding: 10px 25px; border-radius: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(57, 197, 187, 0.3); transition: 0.2s; }
+.btn-create:hover { transform: translateY(-2px); }
+.loading-box { text-align: center; padding: 50px; color: #999; }
+.spinner { width: 40px; height: 40px; border: 4px solid #eee; border-top-color: #39C5BB; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 15px; }
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; }
+.project-card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); cursor: pointer; transition: 0.3s; border: 1px solid #f0f0f0; }
+.project-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+.card-cover { height: 160px; background-size: cover; background-position: center; position: relative; }
+.status-tag { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+.status-tag.recruiting { background: #39C5BB; }
+.status-tag.ended { background: #999; }
+/* 🔥 新增：浏览量角标 */
+.view-count-badge { position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; }
+.card-body { padding: 15px; }
+.card-tags { margin-bottom: 8px; }
+.type-tag { font-size: 11px; background: #f3e5f5; color: #8e24aa; padding: 2px 6px; border-radius: 3px; }
+.card-title { margin: 0 0 8px; font-size: 18px; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-desc { font-size: 13px; color: #888; margin: 0 0 15px; height: 38px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.card-footer { display: flex; justify-content: space-between; font-size: 12px; color: #aaa; border-top: 1px solid #f5f5f5; padding-top: 10px; }
+.empty-state { text-align: center; padding: 50px; color: #999; }
+</style>

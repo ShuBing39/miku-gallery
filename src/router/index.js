@@ -9,10 +9,12 @@ import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import ItemDetail from '../views/ItemDetail.vue'
 
-// 🔥 注意：这里修改了文件名，匹配上一轮生成的代码
-import ProjectDetailView from '../views/ProjectDetailView.vue'
+// ✅ 修正 1：引入正确的新文件 (ProjectDetail.vue)
+import ProjectDetail from '../views/ProjectDetail.vue'
 
-import UserDashboard from '../views/UserDashboard.vue' 
+// ✅ 修正 2：这里改回 UserDashboard.vue (因为您的文件名叫这个)
+import Dashboard from '../views/UserDashboard.vue'
+
 import AdminDashboard from '../views/AdminDashboard.vue'
 import ProjectsView from '../views/Projects.vue' 
 import SubmitWork from '../views/SubmitWork.vue'
@@ -41,13 +43,15 @@ const router = createRouter({
       name: 'projects', 
       component: ProjectsView 
     },
-    // 企划详情页路由
+    
+    // ✅ 修正 3：企划详情页路由指向新组件
     { 
       path: '/project/:id', 
       name: 'project-detail', 
-      component: ProjectDetailView, 
+      component: ProjectDetail, 
       props: true 
     },
+
     { 
       path: '/submit-project', 
       name: 'submit-project', 
@@ -60,12 +64,16 @@ const router = createRouter({
       component: SubmitWork, 
       meta: { requiresAuth: true } 
     },
+    
+    // ✅ 修正 4：社团/个人中心路由
+    // 路径设为 /dashboard，但文件读取的是 UserDashboard.vue
     { 
-      path: '/profile', 
-      name: 'profile', 
-      component: UserDashboard, 
+      path: '/dashboard', 
+      name: 'dashboard', 
+      component: Dashboard, 
       meta: { requiresAuth: true } 
     },
+
     { 
       path: '/admin', 
       name: 'admin', 
