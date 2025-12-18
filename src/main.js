@@ -1,10 +1,13 @@
 import { createApp } from 'vue'
+import { createPinia } from 'pinia'
 import App from './App.vue'
-import router from './router' // 👈 1. 一定要引入 router
+import router from './router'
 
-// import './style.css' (保留你原有的样式引入，可能有差异，不用动)
+import './assets/main.css'
 
 const app = createApp(App)
 
-app.use(router) // 👈 2. 一定要使用 router
+app.use(createPinia()) // 启用状态管理
+app.use(router)
+
 app.mount('#app')

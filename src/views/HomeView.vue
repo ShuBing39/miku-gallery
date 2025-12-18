@@ -16,12 +16,10 @@
             <p v-if="b.description">{{ b.description }}</p>
           </div>
         </div>
-        
         <div class="indicators">
           <span v-for="(b, idx) in banners" :key="idx" :class="{ active: idx === activeIndex }" @click="activeIndex = idx"></span>
         </div>
       </div>
-
       <div v-else class="banner-content default-banner">
         <img src="https://ec.crypton.co.jp/pages/prod/vocaloid/img/main_mikuv4x_b.png" class="banner-bg" />
         <div class="banner-text">
@@ -36,7 +34,7 @@
         <input 
           v-model="homeSearch" 
           @keyup.enter="goToEncyclopedia"
-          placeholder="💡 有什么不懂的？搜搜葱葱百科！(如: 应援棒、门票、打call)" 
+          placeholder="💡 搜搜葱葱百科！(如: 应援棒、门票、打call)" 
         />
         <button @click="goToEncyclopedia">🔍 搜索百科</button>
       </div>
@@ -86,6 +84,7 @@
           <h3>✨ 最新收录周边</h3>
           <span class="more-link" @click="$router.push('/wiki')">查看更多 ></span>
         </div>
+        
         <div v-if="loading" class="loading-skel">加载中...</div>
         <div v-else class="item-list">
           <div v-for="item in latestGoods" :key="item.id" class="list-item" @click="handleItemClick(item)">
@@ -106,6 +105,7 @@
           <h3>📡 最新活动/企划</h3>
           <span class="more-link" @click="$router.push('/events')">全部情报 ></span>
         </div>
+        
         <div v-if="loading" class="loading-skel">加载中...</div>
         <div v-else class="item-list">
           <div v-for="ev in mixedEvents" :key="ev.uniqueId" class="list-item event-style" @click="handleItemClick(ev)">
@@ -127,10 +127,9 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'vue-router'
+import { supabase } from '../supabase' // 确保这里路径正确
 
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY)
 const router = useRouter()
 
 const latestGoods = ref([])
@@ -162,14 +161,29 @@ const fetchBanners = async () => { const { data } = await supabase.from('home_ba
 const startCarousel = () => { timer = setInterval(() => { if (banners.value.length > 1) { activeIndex.value = (activeIndex.value + 1) % banners.value.length } }, 5000) }
 const handleBannerClick = (b) => { if (b.link_url) { if (b.link_url.startsWith('http')) window.open(b.link_url, '_blank'); else router.push(b.link_url) } }
 const handleItemClick = (item) => { if (item.isProject) { router.push(`/project/${item.id}`) } else if (item.link && item.link.startsWith('http')) { window.open(item.link, '_blank') } else { router.push(`/item/${item.id}`) } }
-const fetchData = async () => { loading.value = true; const { data: goods } = await supabase.from('items').select('*').not('category', 'in', `(${OFFICIAL_EVENT_CATEGORIES.map(c=>`"${c}"`).join(',')}, "同人企划", "企划")`).eq('status', 'approved').order('created_at', { ascending: false }).limit(5); if (goods) latestGoods.value = goods; const p1 = supabase.from('items').select('*').in('category', OFFICIAL_EVENT_CATEGORIES).eq('status', 'approved').order('created_at', { ascending: false }).limit(5); const p2 = supabase.from('projects').select('*').eq('allow_external', true).order('created_at', { ascending: false }).limit(5); const [res1, res2] = await Promise.all([p1, p2]); let combined = []; if (res1.data) { combined = res1.data.map(e => ({ ...e, isProject: false, uniqueId: 'ev_' + e.id, statusClass: getEventStatus(e).class, statusText: getEventStatus(e).text })) } if (res2.data) { const projectsMapped = res2.data.map(p => ({ id: p.id, name: p.name, image_url: p.image_url, category: '同人企划', created_at: p.created_at, isProject: true, uniqueId: 'pj_' + p.id, statusClass: p.recruit_status === 'recruiting' ? 'active' : 'ended', statusText: p.recruit_status === 'recruiting' ? '招募中' : (p.recruit_status === 'ongoing' ? '进行中' : '已结束') })); combined = [...combined, ...projectsMapped] } combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); mixedEvents.value = combined.slice(0, 6); loading.value = false }
 const handleImgError = (e) => { e.target.src = 'https://via.placeholder.com/100x100?text=No+Img' }
 const getEventStatus = (ev) => { const today = new Date().toISOString().split('T')[0]; if (ev.release_date && today < ev.release_date) return { text: '即将开始', class: 'upcoming' }; if (ev.event_end_date && today > ev.event_end_date) return { text: '已结束', class: 'ended' }; return { text: '进行中', class: 'active' } }
+
+const fetchData = async () => {
+  loading.value = true
+  const { data: goods } = await supabase.from('items').select('*').not('category', 'in', `(${OFFICIAL_EVENT_CATEGORIES.map(c=>`"${c}"`).join(',')}, "同人企划", "企划")`).eq('status', 'approved').order('created_at', { ascending: false }).limit(5)
+  if (goods) latestGoods.value = goods
+  const p1 = supabase.from('items').select('*').in('category', OFFICIAL_EVENT_CATEGORIES).eq('status', 'approved').order('created_at', { ascending: false }).limit(5)
+  const p2 = supabase.from('projects').select('*').eq('allow_external', true).order('created_at', { ascending: false }).limit(5)
+  const [res1, res2] = await Promise.all([p1, p2])
+  let combined = []
+  if (res1.data) combined = res1.data.map(e => ({ ...e, isProject: false, uniqueId: 'ev_' + e.id, statusClass: getEventStatus(e).class, statusText: getEventStatus(e).text }))
+  if (res2.data) { const projectsMapped = res2.data.map(p => ({ id: p.id, name: p.name, image_url: p.image_url, category: '同人企划', created_at: p.created_at, isProject: true, uniqueId: 'pj_' + p.id, statusClass: p.recruit_status === 'recruiting' ? 'active' : 'ended', statusText: p.recruit_status === 'recruiting' ? '招募中' : (p.recruit_status === 'ongoing' ? '进行中' : '已结束') })); combined = [...combined, ...projectsMapped] }
+  combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  mixedEvents.value = combined.slice(0, 6)
+  loading.value = false
+}
 </script>
 
 <style scoped>
 .home-container { max-width: 1200px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', sans-serif; color: #333; }
 
+/* 搜索栏 */
 .hero-search-section { margin-bottom: 30px; display: flex; justify-content: center; }
 .search-wrap { display: flex; width: 100%; max-width: 700px; box-shadow: 0 8px 25px rgba(57, 197, 187, 0.15); border-radius: 40px; background: white; padding: 5px; border: 2px solid #e0f2f1; transition: 0.3s; }
 .search-wrap:hover { box-shadow: 0 10px 30px rgba(57, 197, 187, 0.25); }
@@ -177,23 +191,52 @@ const getEventStatus = (ev) => { const today = new Date().toISOString().split('T
 .search-wrap button { background: #39C5BB; color: white; border: none; padding: 0 35px; border-radius: 40px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; }
 .search-wrap button:hover { background: #2da8a0; }
 
-/* 导航网格 - 使用自动填充，适应卡片数量增加 */
-.nav-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; margin-bottom: 40px; }
-.nav-card { background: white; border: 1px solid #eee; border-radius: 12px; padding: 20px; cursor: pointer; transition: transform 0.2s; text-align: center; }
+/* Nav Grid - 修复后的布局 */
+.nav-grid { 
+  display: grid; 
+  /* 桌面端：强制 6 列 */
+  grid-template-columns: repeat(6, 1fr); 
+  gap: 15px; 
+  margin-bottom: 40px; 
+}
+
+/* 导航卡片样式 */
+.nav-card { background: white; border: 1px solid #eee; border-radius: 12px; padding: 20px; cursor: pointer; transition: transform 0.2s; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .nav-card:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
 .icon { font-size: 24px; margin-bottom: 8px; }
-.nav-card h3 { margin: 0 0 5px 0; font-size: 14px; color: #333; }
+.nav-card h3 { margin: 0 0 5px 0; font-size: 14px; color: #333; font-weight: bold; }
 .nav-card p { margin: 0; font-size: 11px; color: #888; }
 
-/* 颜色定义 */
+/* 颜色 */
 .wiki-card { border-bottom: 3px solid #39c5bb; }
 .kb-card { border-bottom: 3px solid #ffa000; } 
-.ticket-card { border-bottom: 3px solid #00e676; } /* 票务绿色 */
+.ticket-card { border-bottom: 3px solid #00e676; }
 .event-card { border-bottom: 3px solid #8b5cf6; } 
 .project-card { border-bottom: 3px solid #f472b6; }
 .profile-card { border-bottom: 3px solid #fbbf24; }
 
-/* 其他样式 */
+/* 分栏布局 - 修复后的布局 */
+.content-split { 
+  display: grid; 
+  /* 桌面端：强制 2 栏 */
+  grid-template-columns: 1fr 1fr; 
+  gap: 30px; 
+}
+
+/* 响应式适配 */
+@media (max-width: 1024px) {
+  /* 平板：3列 x 2行 */
+  .nav-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 768px) {
+  /* 手机：2列 x 3行 */
+  .nav-grid { grid-template-columns: repeat(2, 1fr); }
+  /* 手机：单栏堆叠 */
+  .content-split { grid-template-columns: 1fr; }
+}
+
+/* 其他样式保持不变 */
 .banner-wrapper { height: 200px; border-radius: 12px; overflow: hidden; position: relative; margin-bottom: 20px; background: #333; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
 .carousel-container { width: 100%; height: 100%; position: relative; }
 .banner-slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: center; opacity: 0; transition: opacity 0.5s ease; cursor: pointer; }
@@ -204,7 +247,6 @@ const getEventStatus = (ev) => { const today = new Date().toISOString().split('T
 .indicators { position: absolute; bottom: 15px; right: 20px; display: flex; gap: 8px; z-index: 3; }
 .indicators span { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.5); cursor: pointer; transition: 0.3s; }
 .indicators span.active { background: white; transform: scale(1.2); }
-.content-split { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
 .section-col { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); }
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
 .section-header h3 { margin: 0; font-size: 18px; color: #2c3e50; border-left: 4px solid #39C5BB; padding-left: 10px; }

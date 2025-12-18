@@ -13,5 +13,8 @@ body {
   padding: 0;
   font-family: 'Helvetica Neue', Arial, sans-serif;
   background-color: #fcfcfc;
+  /* Ensure body takes full width */
+  width: 100%;
+  min-height: 100vh;
 }
 </style>
