@@ -1,6 +1,5 @@
 <template>
   <div class="home-container">
-    
     <div class="banner-wrapper">
       <div v-if="banners.length > 0" class="carousel-container">
         <div 
@@ -22,116 +21,60 @@
       </div>
       <div v-else class="banner-content default-banner">
         <img src="https://ec.crypton.co.jp/pages/prod/vocaloid/img/main_mikuv4x_b.png" class="banner-bg" />
-        <div class="banner-text">
-          <h2>Miku Expo 10th Anniversary</h2>
-          <p>庆祝初音未来世界巡演十周年</p>
-        </div>
+        <div class="banner-text"><h2>Miku Expo 10th Anniversary</h2><p>庆祝初音未来世界巡演十周年</p></div>
       </div>
     </div>
 
     <div class="hero-search-section">
       <div class="search-wrap">
-        <input 
-          v-model="homeSearch" 
-          @keyup.enter="goToEncyclopedia"
-          placeholder="💡 搜搜葱葱百科！(如: 应援棒、门票、打call)" 
-        />
+        <input v-model="homeSearch" @keyup.enter="goToEncyclopedia" placeholder="💡 搜搜葱葱百科！(如: 应援棒、门票)" />
         <button @click="goToEncyclopedia">🔍 搜索百科</button>
       </div>
     </div>
 
     <div class="nav-grid">
-      <div class="nav-card wiki-card" @click="$router.push('/wiki')">
-        <div class="icon">📚</div>
-        <h3>葱葱维基</h3>
-        <p>查周边、看年份</p>
-      </div>
-      
-      <div class="nav-card kb-card" @click="$router.push('/encyclopedia')">
-        <div class="icon">📖</div>
-        <h3>葱葱百科</h3>
-        <p>知识科普、攻略</p>
-      </div>
-
-      <div class="nav-card event-card" @click="$router.push('/events')">
-        <div class="icon">📅</div>
-        <h3>活动情报</h3>
-        <p>魔法未来 / 线上 live</p>
-      </div>
-
-      <div class="nav-card ticket-card" @click="$router.push('/tickets')">
-        <div class="icon">🎫</div>
-        <h3>票务中心</h3>
-        <p>门票转让、交换</p>
-      </div>
-
-      <div class="nav-card project-card" @click="$router.push('/projects')">
-        <div class="icon">🤝</div>
-        <h3>企划大厅</h3>
-        <p>加入创作、为爱发电</p>
-      </div>
-
-      <div class="nav-card profile-card" @click="$router.push('/profile')">
-        <div class="icon">👤</div>
-        <h3>个人中心</h3>
-        <p>社团 / 历史管理</p>
-      </div>
+      <div class="nav-card wiki-card" @click="$router.push('/wiki')"><div class="icon">📚</div><h3>葱葱维基</h3><p>查周边、看年份</p></div>
+      <div class="nav-card kb-card" @click="$router.push('/encyclopedia')"><div class="icon">📖</div><h3>葱葱百科</h3><p>知识科普、攻略</p></div>
+      <div class="nav-card event-card" @click="$router.push('/events')"><div class="icon">📅</div><h3>活动情报</h3><p>魔法未来 / 线上 live</p></div>
+      <div class="nav-card ticket-card" @click="$router.push('/tickets')"><div class="icon">🎫</div><h3>票务中心</h3><p>门票转让、交换</p></div>
+      <div class="nav-card project-card" @click="$router.push('/projects')"><div class="icon">🤝</div><h3>企划大厅</h3><p>加入创作、为爱发电</p></div>
+      <div class="nav-card profile-card" @click="$router.push('/profile')"><div class="icon">👤</div><h3>个人中心</h3><p>社团 / 历史管理</p></div>
     </div>
 
     <div class="content-split">
       <div class="section-col">
-        <div class="section-header">
-          <h3>✨ 最新收录周边</h3>
-          <span class="more-link" @click="$router.push('/wiki')">查看更多 ></span>
-        </div>
-        
+        <div class="section-header"><h3>✨ 最新收录周边</h3><span class="more-link" @click="$router.push('/wiki')">查看更多 ></span></div>
         <div v-if="loading" class="loading-skel">加载中...</div>
         <div v-else class="item-list">
           <div v-for="item in latestGoods" :key="item.id" class="list-item" @click="handleItemClick(item)">
             <img :src="item.image_url" class="item-thumb" referrerpolicy="no-referrer" @error="handleImgError"/>
-            <div class="item-info">
-              <h4 class="item-title">{{ item.name }}</h4>
-              <div class="item-meta">
-                <span class="date">{{ item.release_date }}</span>
-                <span class="tag cat">{{ item.category }}</span>
-              </div>
-            </div>
+            <div class="item-info"><h4 class="item-title">{{ item.name }}</h4><div class="item-meta"><span class="date">{{ formatDate(item.release_date) }}</span><span class="tag cat">{{ item.category }}</span></div></div>
           </div>
         </div>
       </div>
-
       <div class="section-col">
-        <div class="section-header">
-          <h3>📡 最新活动/企划</h3>
-          <span class="more-link" @click="$router.push('/events')">全部情报 ></span>
-        </div>
-        
+        <div class="section-header"><h3>📡 最新活动/企划</h3><span class="more-link" @click="$router.push('/events')">全部情报 ></span></div>
         <div v-if="loading" class="loading-skel">加载中...</div>
         <div v-else class="item-list">
           <div v-for="ev in mixedEvents" :key="ev.uniqueId" class="list-item event-style" @click="handleItemClick(ev)">
             <img :src="ev.image_url" class="item-thumb" referrerpolicy="no-referrer" @error="handleImgError"/>
-            <div class="item-info">
-              <h4 class="item-title">{{ ev.name }}</h4>
-              <div class="item-meta">
-                <span class="status-badge" :class="ev.statusClass">{{ ev.statusText }}</span>
-                <span class="tag" :class="ev.isProject ? 'proj-tag' : 'evt-tag'">{{ ev.category }}</span>
-              </div>
-            </div>
+            <div class="item-info"><h4 class="item-title">{{ ev.name }}</h4><div class="item-meta"><span class="status-badge" :class="ev.statusClass">{{ ev.statusText }}</span><span class="tag" :class="ev.isProject ? 'proj-tag' : 'evt-tag'">{{ ev.category }}</span></div></div>
           </div>
         </div>
       </div>
     </div>
-
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { supabase } from '../supabase' // 确保这里路径正确
+// ✅ 修正引用路径
+import { supabase } from '../services/supabase'
+// ✅ 修正工具引用路径
+import { formatDate, handleImgError } from '../utils/formatters'
 
 const router = useRouter()
-
 const latestGoods = ref([])
 const mixedEvents = ref([])
 const loading = ref(true)
@@ -149,19 +92,11 @@ onMounted(async () => {
 
 onUnmounted(() => { if(timer) clearInterval(timer) })
 
-const goToEncyclopedia = () => {
-  if (homeSearch.value.trim()) {
-    router.push({ path: '/encyclopedia', query: { q: homeSearch.value.trim() } })
-  } else {
-    router.push('/encyclopedia')
-  }
-}
-
+const goToEncyclopedia = () => { if (homeSearch.value.trim()) { router.push({ path: '/encyclopedia', query: { q: homeSearch.value.trim() } }) } else { router.push('/encyclopedia') } }
 const fetchBanners = async () => { const { data } = await supabase.from('home_banners').select('*').eq('is_active', true).order('sort_order', { ascending: false }); if (data) banners.value = data }
 const startCarousel = () => { timer = setInterval(() => { if (banners.value.length > 1) { activeIndex.value = (activeIndex.value + 1) % banners.value.length } }, 5000) }
 const handleBannerClick = (b) => { if (b.link_url) { if (b.link_url.startsWith('http')) window.open(b.link_url, '_blank'); else router.push(b.link_url) } }
 const handleItemClick = (item) => { if (item.isProject) { router.push(`/project/${item.id}`) } else if (item.link && item.link.startsWith('http')) { window.open(item.link, '_blank') } else { router.push(`/item/${item.id}`) } }
-const handleImgError = (e) => { e.target.src = 'https://via.placeholder.com/100x100?text=No+Img' }
 const getEventStatus = (ev) => { const today = new Date().toISOString().split('T')[0]; if (ev.release_date && today < ev.release_date) return { text: '即将开始', class: 'upcoming' }; if (ev.event_end_date && today > ev.event_end_date) return { text: '已结束', class: 'ended' }; return { text: '进行中', class: 'active' } }
 
 const fetchData = async () => {
@@ -181,62 +116,29 @@ const fetchData = async () => {
 </script>
 
 <style scoped>
+/* 样式保留不变 */
 .home-container { max-width: 1200px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', sans-serif; color: #333; }
-
-/* 搜索栏 */
 .hero-search-section { margin-bottom: 30px; display: flex; justify-content: center; }
 .search-wrap { display: flex; width: 100%; max-width: 700px; box-shadow: 0 8px 25px rgba(57, 197, 187, 0.15); border-radius: 40px; background: white; padding: 5px; border: 2px solid #e0f2f1; transition: 0.3s; }
 .search-wrap:hover { box-shadow: 0 10px 30px rgba(57, 197, 187, 0.25); }
 .search-wrap input { flex: 1; border: none; outline: none; padding: 15px 25px; font-size: 16px; border-radius: 40px; background: transparent; }
 .search-wrap button { background: #39C5BB; color: white; border: none; padding: 0 35px; border-radius: 40px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; }
 .search-wrap button:hover { background: #2da8a0; }
-
-/* Nav Grid - 修复后的布局 */
-.nav-grid { 
-  display: grid; 
-  /* 桌面端：强制 6 列 */
-  grid-template-columns: repeat(6, 1fr); 
-  gap: 15px; 
-  margin-bottom: 40px; 
-}
-
-/* 导航卡片样式 */
+.nav-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 15px; margin-bottom: 40px; }
 .nav-card { background: white; border: 1px solid #eee; border-radius: 12px; padding: 20px; cursor: pointer; transition: transform 0.2s; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .nav-card:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
 .icon { font-size: 24px; margin-bottom: 8px; }
 .nav-card h3 { margin: 0 0 5px 0; font-size: 14px; color: #333; font-weight: bold; }
 .nav-card p { margin: 0; font-size: 11px; color: #888; }
-
-/* 颜色 */
 .wiki-card { border-bottom: 3px solid #39c5bb; }
 .kb-card { border-bottom: 3px solid #ffa000; } 
 .ticket-card { border-bottom: 3px solid #00e676; }
 .event-card { border-bottom: 3px solid #8b5cf6; } 
 .project-card { border-bottom: 3px solid #f472b6; }
 .profile-card { border-bottom: 3px solid #fbbf24; }
-
-/* 分栏布局 - 修复后的布局 */
-.content-split { 
-  display: grid; 
-  /* 桌面端：强制 2 栏 */
-  grid-template-columns: 1fr 1fr; 
-  gap: 30px; 
-}
-
-/* 响应式适配 */
-@media (max-width: 1024px) {
-  /* 平板：3列 x 2行 */
-  .nav-grid { grid-template-columns: repeat(3, 1fr); }
-}
-
-@media (max-width: 768px) {
-  /* 手机：2列 x 3行 */
-  .nav-grid { grid-template-columns: repeat(2, 1fr); }
-  /* 手机：单栏堆叠 */
-  .content-split { grid-template-columns: 1fr; }
-}
-
-/* 其他样式保持不变 */
+.content-split { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+@media (max-width: 1024px) { .nav-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 768px) { .nav-grid { grid-template-columns: repeat(2, 1fr); } .content-split { grid-template-columns: 1fr; } }
 .banner-wrapper { height: 200px; border-radius: 12px; overflow: hidden; position: relative; margin-bottom: 20px; background: #333; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
 .carousel-container { width: 100%; height: 100%; position: relative; }
 .banner-slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: center; opacity: 0; transition: opacity 0.5s ease; cursor: pointer; }

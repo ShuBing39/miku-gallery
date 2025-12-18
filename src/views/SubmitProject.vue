@@ -1,87 +1,96 @@
 <template>
-  <div class="page-wrapper">
-    <button class="back-home-btn" @click="goBack">⬅ 返回</button>
+  <div class="submit-container">
+    <div class="form-card">
+      <div class="header">
+        <h2>📢 发起新企划</h2>
+        <p>召集伙伴，共同创作！</p>
+      </div>
 
-    <div class="submit-container">
-      <div class="form-box">
-        <div class="header-area">
-          <h2 class="title">📢 发起同人企划</h2>
-          <p class="subtitle">召集伙伴，共同创作，为爱发电</p>
+      <div class="form-body">
+        <div class="form-group identity-section" v-if="myCircles.length > 0">
+          <label>🚩 发布名义</label>
+          <div class="identity-selector">
+            <select v-model="form.identity" class="std-input highlight-select">
+              <option value="individual">
+                👤 个人名义 ({{ displayName }} - UID:{{ displayUID }})
+              </option>
+              <option v-for="c in myCircles" :key="c.id" :value="c.id">
+                🏯 社团: {{ c.name }}
+              </option>
+            </select>
+            <p class="hint" v-if="form.identity !== 'individual'">
+              * 该企划将显示在 [{{ getCircleName(form.identity) }}] 的社团主页，且管理员可共同管理。
+            </p>
+          </div>
+        </div>
+        <div class="form-group identity-section" v-else>
+           <label>🚩 发布身份</label>
+           <div class="current-id-text">
+             👤 个人发布 ({{ displayName }} <span class="uid-pill">UID:{{ displayUID }}</span>)
+           </div>
         </div>
 
-        <div class="form-content">
-          <div class="identity-section">
-            <label class="section-label">请选择发布名义：</label>
-            <div class="identity-options">
-              <div class="id-card" :class="{ active: publishAs === 'personal' }" @click="publishAs = 'personal'">
-                <span class="icon">👤</span>
-                <span class="text">个人名义</span>
-                <span class="check">✔</span>
-              </div>
-              <div v-if="myCircleInfo" class="id-card" :class="{ active: publishAs === 'circle' }" @click="publishAs = 'circle'">
-                <span class="icon">🏰</span>
-                <div class="text-group">
-                  <span class="text">社团名义</span>
-                  <span class="sub-text">{{ myCircleInfo.name }}</span>
-                </div>
-                <span class="check">✔</span>
-              </div>
-            </div>
-            <p class="hint-text" v-if="publishAs === 'circle'">* 此企划将归属于社团管理，并显示在社团主页。</p>
-            <p class="hint-text" v-else>* 此企划将归属于您个人。</p>
-          </div>
+        <div class="form-group">
+          <label>企划名称 *</label>
+          <input v-model="form.name" placeholder="如: 2025初音未来生日贺图企划" class="std-input" />
+        </div>
 
-          <div class="divider"></div>
-
-          <div class="form-group">
-            <label>企划标题 *</label>
-            <input v-model="form.name" placeholder="例如: 2025初音未来庆生贺图企划" />
-          </div>
-
-          <div class="form-group">
-            <label>企划类型</label>
-            <select v-model="form.project_type" class="select-std">
-              <option>综合</option><option>音乐</option><option>绘画/插图</option>
-              <option>PV/视频</option><option>手书/漫画</option><option>周边制作</option>
-              <option>线下活动</option><option>游戏制作</option><option>众筹</option>
+        <div class="row">
+          <div class="col">
+            <label>企划类型 *</label>
+            <select v-model="form.project_type" class="std-input">
+              <option disabled value="">请选择</option>
+              <option>综合企划</option>
+              <option>合唱/合奏</option>
+              <option>画集/插画</option>
+              <option>视频PV</option>
+              <option>游戏制作</option>
+              <option>线下活动</option>
             </select>
           </div>
-
-          <div class="row">
-            <div class="form-group half"><label>开始日期</label><input type="date" v-model="form.start_date" /></div>
-            <div class="form-group half"><label>截止日期</label><input type="date" v-model="form.end_date" /></div>
-          </div>
-
-          <div class="form-group">
-            <label>企划海报/头图</label>
-            <div class="upload-area" @click="$refs.projectFile.click()">
-              <img v-if="preview" :src="preview" class="preview-img" />
-              <div v-else class="upload-placeholder"><span>📷 点击上传海报</span></div>
-            </div>
-            <input type="file" ref="projectFile" @change="handleFile" accept="image/*" style="display:none" />
-          </div>
-
-          <div class="settings-box">
-            <div class="setting-row">
-              <label class="checkbox-label">
+          <div class="col">
+            <label>招募状态</label>
+            <div class="radio-group">
+              <label class="radio-label">
                 <input type="checkbox" v-model="form.allow_external"> 
-                <span class="bold">🌏 公开招募 (发布到企划大厅)</span>
-              </label>
-            </div>
-            <div class="setting-row">
-              <label class="checkbox-label">
-                <input type="checkbox" v-model="form.is_ai"> 🤖 包含AI辅助创作
+                📢 公开招募 (允许在此平台申请加入)
               </label>
             </div>
           </div>
+        </div>
 
-          <div class="form-group">
-            <label>详细规则描述</label>
-            <textarea v-model="form.description" rows="6" placeholder="请详细描述企划内容..."></textarea>
+        <div class="form-group">
+          <label>企划封面/海报 *</label>
+          <div class="upload-area" @click="$refs.fileInput.click()">
+            <img v-if="previewUrl" :src="previewUrl" class="preview-img" />
+            <div v-else class="upload-placeholder">
+              <span>🖼️ 点击上传封面</span>
+              <span class="sub-text">建议尺寸 16:9</span>
+            </div>
           </div>
+          <input ref="fileInput" type="file" accept="image/*" @change="handleFileChange" style="display:none" />
+        </div>
 
-          <button class="submit-btn" @click="submit" :disabled="uploading">
-            {{ uploading ? '正在创建...' : '🚀 确认发布' }}
+        <div class="row">
+          <div class="col">
+            <label>开始日期</label>
+            <input type="date" v-model="form.start_date" class="std-input" />
+          </div>
+          <div class="col">
+            <label>预计结束/截稿</label>
+            <input type="date" v-model="form.end_date" class="std-input" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>企划详情介绍</label>
+          <textarea v-model="form.description" rows="6" class="std-input" placeholder="请详细描述企划内容、招募要求、排期安排等..."></textarea>
+        </div>
+
+        <div class="actions">
+          <button @click="$router.go(-1)" class="btn-cancel">取消</button>
+          <button @click="handleSubmit" class="btn-submit" :disabled="loading">
+            {{ loading ? '创建中...' : '🚀 立即发布' }}
           </button>
         </div>
       </div>
@@ -90,134 +99,153 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { createClient } from '@supabase/supabase-js'
-import { useRouter } from 'vue-router'
+import { ref, reactive, onMounted, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { useUserStore } from '../stores/userStore'
+import { supabase } from '../services/supabase'
+import { uploadImage } from '../services/storage'
+import { submitProject } from '../services/submitData'
 
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY)
 const router = useRouter()
-const currentUser = ref(null)
-const uploading = ref(false)
-const preview = ref(null)
-const fileToUpload = ref(null)
-const publishAs = ref('personal')
-const myCircleInfo = ref(null)
+const route = useRoute()
+const userStore = useUserStore()
+
+const loading = ref(false)
+const file = ref(null)
+const previewUrl = ref('')
+const myCircles = ref([])
 
 const form = reactive({
-  name: '', start_date: '', end_date: '', 
-  allow_external: true, is_ai: false, description: '', project_type: '综合'
+  identity: 'individual',
+  name: '',
+  project_type: '',
+  start_date: '',
+  end_date: '',
+  description: '',
+  allow_external: true
 })
+
+// 计算属性：优先显示 Profile 里的数据
+const displayName = computed(() => userStore.profile?.username || userStore.user?.user_metadata?.username || '我')
+const displayUID = computed(() => userStore.profile?.uid || 'Loading...')
 
 onMounted(async () => {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) { alert('请先登录'); router.push('/login'); return }
-  currentUser.value = user
+  if (!userStore.user) {
+    await userStore.initialize() // 确保 store 初始化
+    if (!userStore.user) return router.push('/login')
+  }
   
-  // 检查是否有社团权限
-  const { data: member } = await supabase.from('circle_members')
-    .select('circle_id, role').eq('user_id', user.id)
-    .in('role', ['团长', '主催', '管理员']).maybeSingle()
+  await fetchMyCircles()
   
-  if (member) {
-    const { data: circle } = await supabase.from('circles').select('id, name').eq('id', member.circle_id).single()
-    if (circle) myCircleInfo.value = circle
+  if (route.query.circle_id) {
+    const target = myCircles.value.find(c => c.id === route.query.circle_id)
+    if (target) form.identity = target.id
   }
 })
 
-const handleFile = (e) => {
-  const file = e.target.files[0]
-  if (file) { fileToUpload.value = file; preview.value = URL.createObjectURL(file) }
-}
-const goBack = () => router.push('/projects')
-
-const submit = async () => {
-  if (!form.name) return alert('请填写标题')
-  uploading.value = true
-
+const fetchMyCircles = async () => {
   try {
-    let imageUrl = 'https://placehold.co/600x400?text=Project'
-    if (fileToUpload.value) {
-      const fileExt = fileToUpload.value.name.split('.').pop()
-      const fileName = `projects/${Date.now()}.${fileExt}`
-      const { error: upErr } = await supabase.storage.from('user_uploads').upload(fileName, fileToUpload.value)
-      if (!upErr) {
-        const { data: imgData } = supabase.storage.from('user_uploads').getPublicUrl(fileName)
-        imageUrl = imgData.publicUrl
-      }
+    const userId = userStore.user?.id
+    if (!userId) return
+
+    const { data, error } = await supabase
+      .from('circle_members')
+      .select('circles(id, name)')
+      .eq('user_id', userId)
+    
+    if (error) throw error
+    if (data) {
+      myCircles.value = data.map(item => item.circles).filter(Boolean)
+    }
+  } catch (e) {
+    console.error('获取社团列表失败:', e)
+  }
+}
+
+const getCircleName = (id) => {
+  const c = myCircles.value.find(i => i.id === id)
+  return c ? c.name : ''
+}
+
+const handleFileChange = (e) => {
+  const f = e.target.files[0]
+  if (f) {
+    file.value = f
+    previewUrl.value = URL.createObjectURL(f)
+  }
+}
+
+const handleSubmit = async () => {
+  if (!form.name || !form.project_type || !file.value) return alert('请填写必填项并上传封面')
+
+  loading.value = true
+  try {
+    const imageUrl = await uploadImage('user_uploads', 'projects', file.value)
+    const userId = userStore.user.id
+    const payload = {
+      name: form.name,
+      project_type: form.project_type,
+      start_date: form.start_date,
+      end_date: form.end_date,
+      description: form.description,
+      allow_external: form.allow_external,
+      image_url: imageUrl,
+      uploader_id: userId,
+      circle_id: form.identity === 'individual' ? null : form.identity
     }
 
-    let finalDesc = form.description
-    if (form.is_ai) finalDesc = `[包含AI辅助创作] \n${finalDesc}`
-    const finalCircleId = (publishAs.value === 'circle' && myCircleInfo.value) ? myCircleInfo.value.id : null
-
-    // 1. 创建企划
-    const { data: projectData, error: projError } = await supabase.from('projects').insert([{
-      name: form.name, description: finalDesc, image_url: imageUrl, category: '同人企划',
-      project_type: form.project_type, uploader_id: currentUser.value.id, circle_id: finalCircleId,
-      start_date: form.start_date || null, end_date: form.end_date || null, recruit_status: 'recruiting',
-      allow_external: form.allow_external
-    }]).select().single()
-
-    if (projError) throw projError
-
-    // 2. 自动加入成员 (现在数据库有了 is_approved 字段，这段代码可以正常运行了)
-    const { error: memError } = await supabase.from('project_members').insert({
-      project_id: projectData.id,
-      user_id: currentUser.value.id,
-      role: '主催',
-      is_approved: true
-    })
+    await submitProject(payload)
+    alert('企划发布成功！')
     
-    if (memError) console.error('自动加入失败:', memError)
-
-    alert('发布成功！')
-    if (finalCircleId) router.push('/circle')
-    else router.push(`/project/${projectData.id}`)
-
+    if (payload.circle_id) router.push('/circle')
+    else router.push('/projects')
+    
   } catch (e) {
+    console.error(e)
     alert('发布失败: ' + e.message)
+  } finally {
+    loading.value = false
   }
-  uploading.value = false
 }
 </script>
 
 <style scoped>
-.page-wrapper { background: #f0f9f9; min-height: 100vh; padding: 40px 20px; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; position: relative; }
-.back-home-btn { position: absolute; top: 20px; left: 20px; background: white; border: 1px solid #ddd; padding: 8px 15px; border-radius: 20px; cursor: pointer; color: #555; font-weight: bold; transition: 0.2s; }
-.back-home-btn:hover { background: #39C5BB; color: white; border-color: #39C5BB; }
-.submit-container { width: 100%; max-width: 700px; }
-.form-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-.header-area { text-align: center; margin-bottom: 20px; }
-.title { margin: 0; color: #333; font-size: 24px; }
-.subtitle { color: #888; font-size: 14px; margin-top: 5px; }
-.identity-section { background: #f8fbfa; padding: 15px; border-radius: 8px; border: 1px solid #e0f2f1; margin-bottom: 25px; }
-.section-label { font-size: 14px; font-weight: bold; color: #555; display: block; margin-bottom: 10px; }
-.identity-options { display: flex; gap: 15px; }
-.id-card { flex: 1; border: 2px solid #ddd; border-radius: 8px; padding: 10px; cursor: pointer; display: flex; align-items: center; gap: 10px; background: white; transition: 0.2s; position: relative; overflow: hidden; }
-.id-card:hover { border-color: #39C5BB; }
-.id-card.active { border-color: #39C5BB; background: #e0f2f1; color: #00695c; }
-.icon { font-size: 20px; }
-.text-group { display: flex; flex-direction: column; }
-.sub-text { font-size: 11px; color: #888; }
-.check { margin-left: auto; color: #39C5BB; opacity: 0; font-weight: bold; }
-.id-card.active .check { opacity: 1; }
-.hint-text { font-size: 12px; color: #999; margin-top: 8px; }
-.divider { height: 1px; background: #eee; margin-bottom: 25px; }
-.form-group { margin-bottom: 20px; }
-.form-group label { display: block; font-weight: bold; font-size: 14px; margin-bottom: 8px; color: #555; }
-input, textarea, .select-std { width: 100%; padding: 12px; border: 2px solid #eee; border-radius: 8px; box-sizing: border-box; font-size: 14px; transition: 0.2s; }
-input:focus, textarea:focus, .select-std:focus { border-color: #39C5BB; outline: none; }
-.row { display: flex; gap: 20px; } .half { flex: 1; }
-.upload-area { height: 200px; border: 2px dashed #ccc; border-radius: 8px; display: flex; justify-content: center; align-items: center; cursor: pointer; background: #fafafa; overflow: hidden; transition: 0.2s; }
-.upload-area:hover { border-color: #39C5BB; background: #e0f2f1; }
-.preview-img { width: 100%; height: 100%; object-fit: contain; }
-.upload-placeholder { color: #999; font-weight: bold; font-size: 14px; }
-.settings-box { background: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #eee; }
-.setting-row { margin-bottom: 10px; }
-.checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; color: #333; }
-.checkbox-label input { width: auto; transform: scale(1.2); }
-.bold { font-weight: bold; }
-.submit-btn { width: 100%; background: #39C5BB; color: white; padding: 15px; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 10px; transition: 0.2s; }
-.submit-btn:hover { background: #26a69a; box-shadow: 0 4px 10px rgba(57, 197, 187, 0.3); }
-.submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.submit-container { padding: 40px 20px; background: #f0f9f9; min-height: 100vh; display: flex; justify-content: center; }
+.form-card { background: white; width: 100%; max-width: 700px; border-radius: 12px; box-shadow: 0 4px 20px rgba(57, 197, 187, 0.1); overflow: hidden; }
+.header { background: linear-gradient(135deg, #39C5BB, #2da8a0); padding: 30px; color: white; text-align: center; }
+.header h2 { margin: 0 0 5px 0; }
+.header p { margin: 0; opacity: 0.9; font-size: 14px; }
+
+.form-body { padding: 30px; }
+.form-group { margin-bottom: 25px; }
+.row { display: flex; gap: 20px; margin-bottom: 25px; }
+.col { flex: 1; }
+
+label { display: block; font-weight: bold; font-size: 13px; color: #555; margin-bottom: 8px; }
+.std-input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; transition: 0.2s; }
+.std-input:focus { outline: none; border-color: #39C5BB; box-shadow: 0 0 0 3px rgba(57, 197, 187, 0.1); }
+
+/* 身份部分样式 */
+.identity-section { background: #e0f7fa; padding: 15px; border-radius: 8px; border: 1px solid #b2ebf2; }
+.highlight-select { background-color: white; border-color: #39C5BB; color: #00695c; font-weight: bold; }
+.hint { font-size: 12px; color: #00796b; margin-top: 5px; }
+.current-id-text { font-size: 14px; color: #333; font-weight: bold; display: flex; align-items: center; gap: 8px; }
+.uid-pill { background: #39C5BB; color: white; font-size: 11px; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+
+.upload-area { width: 100%; height: 240px; border: 2px dashed #ddd; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: #fafafa; overflow: hidden; transition: 0.2s; }
+.upload-area:hover { border-color: #39C5BB; background: #f0fcfb; }
+.preview-img { width: 100%; height: 100%; object-fit: cover; }
+.upload-placeholder { display: flex; flex-direction: column; align-items: center; color: #999; }
+.sub-text { font-size: 12px; margin-top: 5px; opacity: 0.7; }
+
+.radio-group { padding-top: 10px; }
+.radio-label { display: flex; align-items: center; gap: 8px; cursor: pointer; color: #333; }
+
+.actions { display: flex; gap: 15px; margin-top: 40px; padding-top: 20px; border-top: 1px solid #f0f0f0; }
+button { flex: 1; padding: 14px; border-radius: 8px; font-weight: bold; cursor: pointer; border: none; font-size: 16px; transition: 0.2s; }
+.btn-submit { background: #39C5BB; color: white; }
+.btn-submit:hover:not(:disabled) { background: #2da8a0; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(57, 197, 187, 0.3); }
+.btn-submit:disabled { background: #ccc; cursor: not-allowed; }
+.btn-cancel { background: #f5f5f5; color: #666; }
+.btn-cancel:hover { background: #eeeeee; }
 </style>

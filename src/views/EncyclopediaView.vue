@@ -1,227 +1,126 @@
 <template>
-    <div class="kb-container">
-      <div class="kb-header">
-        <button class="back-btn" @click="$router.push('/')">⬅ 返回首页</button>
-        <h1>📖 葱葱百科</h1>
-        <p>初音未来相关知识、演唱会攻略、应援文化科普</p>
-        
-        <div class="big-search-box">
-          <input 
-            v-model="searchQuery" 
-            @input="handleSearch" 
-            placeholder="🔍 搜索问题 (如: 应援棒去哪买、门票怎么抽)"
-            class="kb-search-input"
-          />
-          <button class="create-btn" @click="$router.push('/encyclopedia/edit')">➕ 创建新词条</button>
-        </div>
+  <div class="encyclopedia-container">
+    <div class="hero-header">
+      <h1>📖 葱葱百科知识库</h1>
+      <div class="search-bar">
+        <input v-model="searchText" @keyup.enter="handleSearch" placeholder="搜索词条 (如: 荧光棒, 魔法未来)..." />
+        <button @click="handleSearch">🔍</button>
       </div>
-  
-      <div class="kb-content">
-        <div v-if="loading" class="loading">📡 正在分析您的问题...</div>
-  
-        <div v-else-if="articles.length > 0" class="article-list">
-          <h3 v-if="searchQuery">💡 猜您想问：</h3>
-          <h3 v-else>✨ 热门科普</h3>
-  
-          <div class="grid">
-            <div v-for="art in articles" :key="art.id" class="article-card" @click="openArticle(art)">
-              <div class="art-body">
-                <div class="art-main">
-                  <h2 class="art-title">{{ art.title }}</h2>
-                  <div class="art-meta">
-                    <span v-if="art.matchedTag" class="tag match-tag">🎯 命中: {{ art.matchedTag }}</span>
-                    <span v-else class="tag">{{ art.category }}</span>
-                    
-                    <span class="time">更新于 {{ formatDate(art.updated_at) }}</span>
-                  </div>
-                  <p class="art-snippet">{{ getSnippet(art.content) }}</p>
-                </div>
-                <div v-if="art.image_url" class="art-img-box">
-                  <img :src="art.image_url" class="art-thumb">
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-  
-        <div v-else class="empty-state">
-          <p>🛸 看起来知识库里还没有收录这个问题</p>
-          <div v-if="searchQuery">
-            <p>核心关键词可能是：<strong>{{ extractKeyword(searchQuery) }}</strong></p>
-            <button class="create-link" @click="$router.push('/encyclopedia/edit?title=' + searchQuery)">
-              🚀 我知道答案！点此创建 "{{ searchQuery }}" 词条
-            </button>
-          </div>
-        </div>
+      <div class="quick-tags">
+        <span v-for="tag in hotTags" :key="tag" @click="applyTag(tag)" class="tag-pill">#{{ tag }}</span>
       </div>
-  
-      <div v-if="selectedArticle" class="modal-overlay" @click.self="selectedArticle = null">
-        <div class="modal-content read-mode">
-          <button class="close-btn" @click="selectedArticle = null">✕</button>
-          <div class="article-header">
-            <span class="cat-badge">{{ selectedArticle.category }}</span>
-            <h1>{{ selectedArticle.title }}</h1>
-            <div class="meta-info">
-              <span>最后编辑: {{ selectedArticle.editor_name || '热心葱粉' }}</span>
-              <span>{{ formatDate(selectedArticle.updated_at) }}</span>
-              <button class="edit-link" @click="goToEdit(selectedArticle.id)">✎ 编辑 / 完善此条</button>
-            </div>
-          </div>
-          <div class="article-body">
-            <img v-if="selectedArticle.image_url" :src="selectedArticle.image_url" class="hero-img">
-            <div class="text-content" v-html="formatContent(selectedArticle.content)"></div>
+    </div>
+
+    <div class="action-row">
+      <h3>📚 最新收录</h3>
+      <button class="btn-create" @click="$router.push('/encyclopedia/edit')">➕ 创建新词条</button>
+    </div>
+
+    <div v-if="loading" class="loading-state">
+      <div class="spinner"></div>
+    </div>
+
+    <div v-else-if="entries.length > 0" class="entries-grid">
+      <div v-for="entry in entries" :key="entry.id" class="entry-card" @click="$router.push(`/encyclopedia?id=${entry.id}`)">
+        <div class="card-icon">{{ getIcon(entry.category) }}</div>
+        <div class="card-body">
+          <h4>{{ entry.title }}</h4>
+          <p>{{ entry.summary || '暂无摘要' }}</p>
+          <div class="card-tags">
+            <span v-for="t in (entry.tags || []).slice(0,3)" :key="t" class="mini-tag">{{ t }}</span>
           </div>
         </div>
       </div>
     </div>
-  </template>
-  
-  <script setup>
-  import { ref, onMounted } from 'vue'
-  import { createClient } from '@supabase/supabase-js'
-  import { useRouter, useRoute } from 'vue-router'
-  
-  const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY)
-  const router = useRouter()
-  const route = useRoute()
-  
-  const articles = ref([])
-  const loading = ref(false)
-  const searchQuery = ref('')
-  const selectedArticle = ref(null)
-  let debounceTimer = null
-  
-  onMounted(() => {
-    if (route.query.q) {
-      searchQuery.value = route.query.q
-    }
-    fetchArticles()
-  })
-  
-  const handleSearch = () => {
-    if (debounceTimer) clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(fetchArticles, 300)
+
+    <div v-else class="empty-state">
+      <p>未找到相关词条，<a @click="$router.push('/encyclopedia/edit')">去创建</a> 一个？</p>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { getEncyclopediaEntries } from '../services/encyclopediaData' // ✅ 使用新服务
+
+const route = useRoute()
+const router = useRouter()
+
+const loading = ref(true)
+const entries = ref([])
+const searchText = ref('')
+const hotTags = ['应援棒', '魔法未来', '打call', '祭坛', '痛包', '雪未来']
+
+onMounted(() => {
+  if (route.query.q) {
+    searchText.value = route.query.q
   }
-  
-  // 🔥 核心：智能搜索逻辑
-  const fetchArticles = async () => {
-    loading.value = true
-    
-    // 1. 获取所有文章 (量大时应改为后端 Search，但目前前端过滤效果最好)
-    // 我们只取最近的 100 条热数据进行匹配，保证速度
-    const { data } = await supabase.from('wiki_articles')
-      .select('*')
-      .order('updated_at', { ascending: false })
-      .limit(100)
-  
-    if (!data) {
-      articles.value = []
-      loading.value = false
-      return
-    }
-  
-    const query = searchQuery.value.trim().toLowerCase()
-  
-    if (!query) {
-      // 没搜索词，直接显示最新的
-      articles.value = data
-    } else {
-      // 🔥 混合匹配算法
-      const matched = data.map(item => {
-        let score = 0
-        let matchedTag = null
-  
-        // A. 正向匹配：标题包含搜索词 (权重最高)
-        if (item.title.toLowerCase().includes(query)) score += 10
-  
-        // B. 逆向匹配：搜索词包含了文章的 Tag (核心逻辑)
-        // 例如用户搜 "应援棒哪里买"，文章Tag是 "应援棒" -> 命中！
-        if (item.tags && Array.isArray(item.tags)) {
-          for (const tag of item.tags) {
-            if (query.includes(tag.toLowerCase())) {
-              score += 5
-              matchedTag = tag
-              break // 命中一个即可
-            }
-          }
-        }
-  
-        // C. 正向匹配：内容包含搜索词 (权重低)
-        if (item.content.toLowerCase().includes(query)) score += 1
-  
-        return { ...item, score, matchedTag }
-      })
-      
-      // 过滤掉无匹配的，并按分数排序
-      articles.value = matched
-        .filter(item => item.score > 0)
-        .sort((a, b) => b.score - a.score)
-    }
-  
+  loadData()
+})
+
+watch(() => route.query.q, (newVal) => {
+  searchText.value = newVal || ''
+  loadData()
+})
+
+const loadData = async () => {
+  loading.value = true
+  try {
+    entries.value = await getEncyclopediaEntries(searchText.value)
+  } catch (e) {
+    console.error(e)
+  } finally {
     loading.value = false
   }
-  
-  // 简单的关键词提取展示 (用于空状态引导)
-  const extractKeyword = (str) => {
-    if (str.length > 10) return str.slice(0, 5) + '...'
-    return str
-  }
-  
-  const openArticle = async (art) => {
-    if (art.last_updated_by && !art.editor_name) {
-      const { data } = await supabase.from('profiles').select('username').eq('id', art.last_updated_by).single()
-      art.editor_name = data?.username
-    }
-    selectedArticle.value = art
-  }
-  
-  const goToEdit = (id) => {
-    router.push(`/encyclopedia/edit?id=${id}`)
-  }
-  
-  const formatDate = (s) => s ? new Date(s).toLocaleDateString() : ''
-  const getSnippet = (text) => text ? text.slice(0, 80) + '...' : ''
-  const formatContent = (text) => text ? text.replace(/\n/g, '<br>') : ''
-  </script>
-  
-  <style scoped>
-  .kb-container { max-width: 1000px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', sans-serif; min-height: 100vh; }
-  .kb-header { text-align: center; margin-bottom: 40px; padding: 40px 20px; background: linear-gradient(135deg, #e0f7fa 0%, #fff 100%); border-radius: 16px; position: relative; }
-  .back-btn { position: absolute; top: 20px; left: 20px; border: 1px solid #ddd; background: white; padding: 5px 15px; border-radius: 20px; cursor: pointer; color: #666; font-weight: bold; }
-  .kb-header h1 { color: #00695c; margin-bottom: 10px; font-size: 2.5em; }
-  .kb-header p { color: #555; margin-bottom: 25px; }
-  
-  .big-search-box { display: flex; max-width: 700px; margin: 0 auto; gap: 10px; }
-  .kb-search-input { flex: 1; padding: 15px 25px; border: 2px solid #39C5BB; border-radius: 30px; font-size: 16px; outline: none; box-shadow: 0 4px 10px rgba(57, 197, 187, 0.2); }
-  .create-btn { padding: 0 25px; background: #39C5BB; color: white; border: none; border-radius: 30px; font-weight: bold; cursor: pointer; white-space: nowrap; }
-  
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 20px; }
-  .article-card { background: white; padding: 20px; border-radius: 12px; border: 1px solid #eee; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
-  .article-card:hover { transform: translateY(-3px); border-color: #39C5BB; box-shadow: 0 8px 20px rgba(57, 197, 187, 0.15); }
-  
-  .art-body { display: flex; justify-content: space-between; gap: 15px; }
-  .art-main { flex: 1; }
-  .art-title { margin: 0 0 8px 0; color: #333; font-size: 18px; }
-  .art-meta { display: flex; gap: 10px; font-size: 12px; color: #999; margin-bottom: 10px; align-items: center; }
-  .tag { background: #e0f2f1; color: #00695c; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
-  .tag.match-tag { background: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; } /* 命中的Tag高亮 */
-  
-  .art-snippet { color: #666; font-size: 14px; line-height: 1.5; margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .art-thumb { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; background: #eee; border: 1px solid #f0f0f0; }
-  
-  .empty-state { text-align: center; padding: 60px; color: #999; }
-  .create-link { margin-top: 15px; background: white; border: 2px dashed #39C5BB; color: #39C5BB; padding: 12px 30px; border-radius: 30px; cursor: pointer; font-weight: bold; font-size: 15px; }
-  
-  /* 弹窗 */
-  .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 2000; backdrop-filter: blur(4px); }
-  .modal-content.read-mode { width: 800px; max-width: 90%; max-height: 85vh; overflow-y: auto; background: white; padding: 40px; border-radius: 16px; position: relative; box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
-  .close-btn { position: absolute; top: 20px; right: 20px; font-size: 24px; background: none; border: none; cursor: pointer; color: #bbb; }
-  .article-header { border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 20px; }
-  .cat-badge { background: #39C5BB; color: white; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; display: inline-block; margin-bottom: 10px; }
-  .article-header h1 { margin: 5px 0 15px 0; font-size: 32px; color: #333; }
-  .meta-info { color: #999; font-size: 13px; display: flex; gap: 20px; align-items: center; }
-  .edit-link { border: 1px solid #ddd; background: white; padding: 5px 15px; border-radius: 20px; cursor: pointer; font-size: 12px; color: #555; }
-  .edit-link:hover { color: #39C5BB; border-color: #39C5BB; }
-  .hero-img { width: 100%; max-height: 350px; object-fit: cover; border-radius: 12px; margin-bottom: 30px; border: 1px solid #eee; }
-  .text-content { font-size: 16px; line-height: 1.8; color: #444; white-space: pre-wrap; }
-  </style>
+}
+
+const handleSearch = () => {
+  router.push({ query: { ...route.query, q: searchText.value } })
+}
+
+const applyTag = (tag) => {
+  searchText.value = tag
+  handleSearch()
+}
+
+const getIcon = (cat) => {
+  const map = { '攻略': '📘', '历史': '📜', '周边': '🎁', '应援': '📢', '冷知识': '💡' }
+  return map[cat] || '📄'
+}
+</script>
+
+<style scoped>
+.encyclopedia-container { max-width: 1000px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', sans-serif; }
+.hero-header { text-align: center; padding: 40px 20px; background: #fff8e1; border-radius: 16px; margin-bottom: 30px; border: 1px solid #ffe0b2; }
+.hero-header h1 { margin: 0 0 20px 0; color: #f57c00; }
+
+.search-bar { display: flex; max-width: 600px; margin: 0 auto 15px; background: white; padding: 5px; border-radius: 30px; box-shadow: 0 4px 10px rgba(245, 124, 0, 0.1); border: 1px solid #ffe0b2; }
+.search-bar input { flex: 1; border: none; padding: 10px 20px; outline: none; font-size: 16px; border-radius: 30px; }
+.search-bar button { background: #ff9800; color: white; border: none; padding: 0 25px; border-radius: 20px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+.search-bar button:hover { background: #f57c00; }
+
+.quick-tags { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.tag-pill { background: rgba(255, 255, 255, 0.6); color: #e65100; padding: 4px 10px; border-radius: 12px; font-size: 12px; cursor: pointer; border: 1px solid #ffe0b2; transition: 0.2s; }
+.tag-pill:hover { background: white; border-color: #ff9800; }
+
+.action-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.action-row h3 { margin: 0; color: #333; border-left: 4px solid #ff9800; padding-left: 10px; }
+.btn-create { background: #39C5BB; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+
+.loading-state { text-align: center; padding: 50px; }
+.spinner { width: 40px; height: 40px; border: 4px solid #eee; border-top: 4px solid #ff9800; border-radius: 50%; animation: spin 1s infinite linear; margin: 0 auto; }
+@keyframes spin { 100% {transform: rotate(360deg);} }
+
+.entries-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+.entry-card { background: white; border: 1px solid #eee; border-radius: 12px; padding: 20px; cursor: pointer; transition: 0.2s; display: flex; gap: 15px; }
+.entry-card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.05); border-color: #ffcc80; }
+.card-icon { font-size: 32px; background: #fff3e0; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 12px; flex-shrink: 0; }
+.card-body h4 { margin: 0 0 5px 0; font-size: 16px; color: #333; }
+.card-body p { margin: 0 0 10px 0; color: #666; font-size: 13px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card-tags { display: flex; gap: 5px; }
+.mini-tag { font-size: 11px; background: #f5f5f5; color: #888; padding: 2px 6px; border-radius: 4px; }
+
+.empty-state { text-align: center; padding: 50px; color: #999; }
+.empty-state a { color: #39C5BB; cursor: pointer; text-decoration: underline; }
+</style>

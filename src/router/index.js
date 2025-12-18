@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { supabase } from '../supabase'
+// ✅ 修正引用路径：指向 services/supabase.js
+import { supabase } from '../services/supabase'
 
 // 视图组件引入
 import HomeView from '../views/HomeView.vue'
@@ -27,16 +28,29 @@ const router = createRouter({
     { path: '/events', name: 'events', component: EventsView },
     { path: '/projects', name: 'projects', component: ProjectsView },
     
+    // 企划详情页路由
     { path: '/project/:id', name: 'project-detail', component: ProjectDetail, props: true },
+
+    // 发布企划页
     { path: '/submit-project', name: 'submit-project', component: SubmitProject, meta: { requiresAuth: true } },
+    
+    // 发布作品页
     { path: '/submit', name: 'submit', component: SubmitWork, meta: { requiresAuth: true } },
+    
+    // 个人中心路由
     { path: '/dashboard', alias: '/profile', name: 'dashboard', component: Dashboard, meta: { requiresAuth: true } },
+
+    // 社团控制台独立路由
     { path: '/circle', name: 'circle-center', component: CircleCenter, meta: { requiresAuth: true } },
+
     { path: '/admin', name: 'admin', component: AdminDashboard, meta: { requiresAuth: true } },
+    
     { path: '/encyclopedia', name: 'encyclopedia', component: EncyclopediaView },
     { path: '/encyclopedia/edit', name: 'encyclopedia-edit', component: EncyclopediaEdit, meta: { requiresAuth: true } },
+
     { path: '/tickets', name: 'tickets', component: TicketCenter, meta: { requiresAuth: true } },
-    
+
+    // 登录注册及周边详情页
     { path: '/login', name: 'login', component: LoginView },
     { path: '/register', name: 'register', component: RegisterView },
     { path: '/item/:id', name: 'item-detail', component: ItemDetail }
@@ -46,16 +60,12 @@ const router = createRouter({
   }
 })
 
-// 🔥 路由守卫
+// 路由守卫：检查登录状态
 router.beforeEach(async (to, from, next) => {
   if (to.meta.requiresAuth) {
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      // 记录来源
-      next({ path: '/login', query: { redirect: to.fullPath } })
-    } else {
-      next()
-    }
+    if (!session) next('/login')
+    else next()
   } else {
     next()
   }

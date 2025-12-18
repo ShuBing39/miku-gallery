@@ -1,7 +1,8 @@
 <script setup>
   import { ref } from 'vue'
   import { useRouter } from 'vue-router'
-  import { supabase } from '../supabase' 
+  // ✅ 修正引用路径：指向 services/supabase
+  import { supabase } from '../services/supabase' 
   
   const router = useRouter()
   

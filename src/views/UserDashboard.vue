@@ -7,16 +7,24 @@
 
     <div class="profile-header">
       <div class="avatar-section">
-        <div class="avatar-placeholder">{{ userInitial }}</div>
+        <img v-if="userStore.profile?.avatar_url" :src="userStore.profile.avatar_url" class="avatar-img">
+        <div v-else class="avatar-placeholder">{{ userInitial }}</div>
       </div>
+      
       <div class="info-section">
-        <h2>{{ userStore.user?.user_metadata?.username || '葱粉' }}</h2>
-        <p>{{ userStore.user?.email }}</p>
+        <div class="name-row">
+          <h2>{{ userStore.profile?.username || userStore.user?.user_metadata?.username || '未命名用户' }}</h2>
+          <span class="uid-tag">UID: {{ userStore.profile?.uid || '---' }}</span>
+        </div>
+        
+        <p class="email-text">{{ userStore.user?.email }}</p>
+        
         <div class="badges">
           <span class="badge">Vocaloid P</span>
           <span class="badge">收藏家</span>
         </div>
       </div>
+      
       <div class="action-section">
         <button class="admin-btn" @click="$router.push('/admin')">👑 进入管理后台</button>
         <button class="logout-btn" @click="handleLogout">退出登录</button>
@@ -38,15 +46,22 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/userStore'
 
 const router = useRouter()
 const userStore = useUserStore()
 
+// 确保进入页面时 profile 已加载
+onMounted(() => {
+  if (!userStore.profile && userStore.user) {
+    userStore.initialize()
+  }
+})
+
 const userInitial = computed(() => {
-  const name = userStore.user?.user_metadata?.username || 'User'
+  const name = userStore.profile?.username || userStore.user?.user_metadata?.username || 'User'
   return name.charAt(0).toUpperCase()
 })
 
@@ -63,9 +78,16 @@ const handleLogout = async () => {
 
 .profile-header { display: flex; align-items: center; gap: 30px; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 20px rgba(57, 197, 187, 0.1); margin-bottom: 30px; }
 .avatar-placeholder { width: 80px; height: 80px; background: #39C5BB; color: white; font-size: 32px; font-weight: bold; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.avatar-img { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 2px solid #39C5BB; }
+
 .info-section { flex: 1; }
-.info-section h2 { margin: 0 0 5px 0; color: #333; }
-.info-section p { margin: 0; color: #888; font-size: 14px; }
+.name-row { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+.name-row h2 { margin: 0; color: #333; }
+
+/* UID 样式 */
+.uid-tag { font-size: 12px; background: #f0f0f0; color: #666; padding: 2px 6px; border-radius: 4px; font-family: monospace; letter-spacing: 0.5px; border: 1px solid #ddd; }
+
+.email-text { margin: 0; color: #888; font-size: 14px; }
 .badges { display: flex; gap: 8px; margin-top: 10px; }
 .badge { background: #e0f2f1; color: #00695c; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
 

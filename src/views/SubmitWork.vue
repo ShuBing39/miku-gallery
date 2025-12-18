@@ -1,57 +1,80 @@
 <template>
-  <div class="page-wrapper">
-    <button class="back-home-btn" @click="$router.push('/')">⬅ 返回首页</button>
+  <div class="submit-container">
+    <div class="form-card">
+      <div class="header">
+        <h2>📤 投稿新周边/作品</h2>
+        <p>让更多人看到你的收藏或创作！</p>
+      </div>
 
-    <div class="submit-container">
-      <div class="form-box">
-        <div class="header-area">
-          <h2 class="title">✨ 周边投稿 / 维基收录</h2>
-          <p class="subtitle">分享你的收藏、谷子或二创作品到葱葱维基</p>
+      <div class="form-body">
+        <div class="form-group">
+          <label>作品名称 *</label>
+          <input v-model="form.name" placeholder="如: 魔法未来2024荧光棒" class="std-input" />
         </div>
 
-        <div class="form-content">
-          <div class="form-group">
-            <label>周边名称 *</label>
-            <input v-model="form.name" placeholder="例如: 2025雪未来吧唧" />
-          </div>
-
-          <div class="form-group">
-            <label>分类</label>
-            <select v-model="form.category">
+        <div class="row">
+          <div class="col">
+            <label>分类 *</label>
+            <select v-model="form.category" class="std-input">
+              <option disabled value="">请选择</option>
               <option>手办模型</option>
+              <option>毛绒玩偶</option>
+              <option>服饰穿搭</option>
               <option>徽章/吧唧</option>
-              <option>插画/壁纸</option>
-              <option>小谷子/立牌</option>
-              <option>痛车/痛衣</option>
-              <option>音乐/CD</option>
+              <option>生活用品</option>
+              <option>同人志</option>
+              <option>插画/挂画</option>
             </select>
           </div>
+          <div class="col">
+            <label>对应角色</label>
+            <input v-model="form.character" placeholder="如: 初音未来" class="std-input" />
+          </div>
+        </div>
 
-          <div class="form-group">
-            <label>图片 *</label>
-            <div class="upload-area" @click="$refs.singleFile.click()">
-              <img v-if="preview" :src="preview" class="preview-img" />
-              <div v-else class="upload-placeholder"><span>📷 点击上传图片</span></div>
+        <div class="form-group">
+          <label>展示图片 *</label>
+          <div class="upload-area" @click="$refs.fileInput.click()">
+            <img v-if="previewUrl" :src="previewUrl" class="preview-img" />
+            <div v-else class="upload-placeholder">
+              <span>📷 点击上传图片</span>
             </div>
-            <input type="file" ref="singleFile" @change="handleFile" accept="image/*" style="display:none" />
           </div>
+          <input ref="fileInput" type="file" accept="image/*" @change="handleFileChange" style="display:none" />
+        </div>
 
-          <div class="form-group checkbox-row">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="form.is_ai"> 🤖 包含AI辅助创作
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="form.is_fan_work"> 🎨 是同人作品 (非官方)
-            </label>
+        <div class="row">
+          <div class="col">
+            <label>发售/发布日期</label>
+            <input type="date" v-model="form.release_date" class="std-input" />
           </div>
-
-          <div class="form-group">
-            <label>详细描述</label>
-            <textarea v-model="form.description" rows="3" placeholder="描述一下这个周边的细节..."></textarea>
+          <div class="col">
+            <label>价格 (CNY)</label>
+            <input type="number" v-model="form.price" placeholder="0" class="std-input" />
           </div>
+        </div>
 
-          <button class="submit-btn" @click="submit" :disabled="uploading">
-            {{ uploading ? '上传中...' : '🚀 提交收录' }}
+        <div class="form-group">
+          <label>制作方/作者</label>
+          <input v-model="form.author" placeholder="官方品牌或社团名" class="std-input" />
+        </div>
+
+        <div class="form-group checkbox-row">
+          <label>
+            <input type="checkbox" v-model="form.is_fan_work" />
+            这是同人作品
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label>详细介绍</label>
+          <textarea v-model="form.description" rows="5" class="std-input" placeholder="写点什么介绍一下..."></textarea>
+        </div>
+
+        <div class="actions">
+          <button @click="$router.go(-1)" class="btn-cancel">取消</button>
+          <button @click="handleSubmit" class="btn-submit" :disabled="loading">
+            {{ loading ? '上传中...' : '提交审核' }}
           </button>
         </div>
       </div>
@@ -60,83 +83,92 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { createClient } from '@supabase/supabase-js'
+import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { useUserStore } from '../stores/userStore'
+import { uploadImage } from '../services/storage'
+import { submitWork } from '../services/submitData'
 
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY)
 const router = useRouter()
-const currentUser = ref(null)
-const uploading = ref(false)
-const preview = ref(null)
-const fileToUpload = ref(null)
+const userStore = useUserStore()
+
+const loading = ref(false)
+const file = ref(null)
+const previewUrl = ref('')
+const fileInput = ref(null)
 
 const form = reactive({
-  name: '', category: '手办模型', is_ai: false, is_fan_work: true, description: ''
+  name: '',
+  category: '',
+  character: '初音未来',
+  release_date: '',
+  price: '',
+  author: '',
+  is_fan_work: false,
+  description: ''
 })
 
-onMounted(async () => {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) router.push('/login')
-  else currentUser.value = user
-})
-
-const handleFile = (e) => {
-  const file = e.target.files[0]
-  if (file) { fileToUpload.value = file; preview.value = URL.createObjectURL(file) }
+const handleFileChange = (e) => {
+  const f = e.target.files[0]
+  if (f) {
+    file.value = f
+    previewUrl.value = URL.createObjectURL(f)
+  }
 }
 
-const submit = async () => {
-  if (!form.name || !fileToUpload.value) return alert('请填写标题并上传图片')
-  uploading.value = true
+const handleSubmit = async () => {
+  if (!userStore.user) return alert('请先登录')
+  if (!form.name || !form.category || !file.value) return alert('请填写必填项并上传图片')
 
+  loading.value = true
   try {
-    const fileExt = fileToUpload.value.name.split('.').pop()
-    const fileName = `goods/${Date.now()}.${fileExt}`
-    const { error: upErr } = await supabase.storage.from('user_uploads').upload(fileName, fileToUpload.value)
-    if (upErr) throw upErr
-    const { data } = supabase.storage.from('user_uploads').getPublicUrl(fileName)
-    
-    await supabase.from('items').insert([{
-      name: form.name,
-      image_url: data.publicUrl,
-      category: form.category,
-      is_fan_work: form.is_fan_work,
-      is_ai: form.is_ai,
-      description: form.description,
-      author: currentUser.value.user_metadata?.username || '用户',
-      uploader_id: currentUser.value.id,
-      status: 'pending',
-      release_date: new Date().toISOString()
-    }])
+    // 1. 上传图片
+    const imageUrl = await uploadImage('user_uploads', 'items', file.value)
 
-    alert('投稿成功！感谢你的贡献。')
-    router.push('/profile')
+    // 2. 提交数据
+    await submitWork({
+      ...form,
+      image_url: imageUrl,
+      user_id: userStore.user.id
+    })
+
+    alert('投稿成功！请等待管理员审核。')
+    router.push('/dashboard')
   } catch (e) {
-    alert('失败: ' + e.message)
+    console.error(e)
+    alert('提交失败: ' + e.message)
+  } finally {
+    loading.value = false
   }
-  uploading.value = false
 }
 </script>
 
 <style scoped>
-.page-wrapper { background: #f0f9f9; min-height: 100vh; padding: 40px 20px; display: flex; flex-direction: column; align-items: center; position: relative; font-family: sans-serif; }
-.back-home-btn { position: absolute; top: 20px; left: 20px; background: white; border: 1px solid #ddd; padding: 8px 15px; border-radius: 20px; cursor: pointer; color: #555; font-weight: bold; }
-.submit-container { width: 100%; max-width: 600px; }
-.form-box { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-.header-area { text-align: center; margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
-.title { margin: 0; color: #333; font-size: 22px; }
-.subtitle { color: #888; font-size: 13px; margin-top: 5px; }
+.submit-container { padding: 40px 20px; background: #f0f9f9; min-height: 100vh; display: flex; justify-content: center; }
+.form-card { background: white; width: 100%; max-width: 600px; border-radius: 12px; box-shadow: 0 4px 20px rgba(57, 197, 187, 0.1); overflow: hidden; }
+.header { background: #39C5BB; padding: 25px; color: white; text-align: center; }
+.header h2 { margin: 0; }
+.header p { margin: 5px 0 0; opacity: 0.9; font-size: 14px; }
+
+.form-body { padding: 30px; }
 .form-group { margin-bottom: 20px; }
-.form-group label { display: block; font-weight: bold; font-size: 13px; margin-bottom: 8px; color: #555; }
-input, select, textarea { width: 100%; padding: 12px; border: 2px solid #eee; border-radius: 8px; box-sizing: border-box; font-size: 14px; }
-input:focus, select:focus, textarea:focus { border-color: #39C5BB; outline: none; }
-.upload-area { height: 180px; border: 2px dashed #ccc; border-radius: 8px; display: flex; justify-content: center; align-items: center; cursor: pointer; background: #fafafa; overflow: hidden; transition: 0.2s; }
-.upload-area:hover { border-color: #39C5BB; background: #e0f2f1; }
+.row { display: flex; gap: 20px; margin-bottom: 20px; }
+.col { flex: 1; }
+
+label { display: block; font-weight: bold; font-size: 13px; color: #555; margin-bottom: 8px; }
+.std-input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+.std-input:focus { outline: none; border-color: #39C5BB; }
+
+.upload-area { width: 100%; height: 200px; border: 2px dashed #ddd; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: #fafafa; overflow: hidden; transition: 0.2s; }
+.upload-area:hover { border-color: #39C5BB; background: #f0fcfb; }
 .preview-img { width: 100%; height: 100%; object-fit: contain; }
-.checkbox-row { display: flex; gap: 20px; }
-.checkbox-label { display: flex; align-items: center; gap: 5px; cursor: pointer; font-weight: normal !important; }
-.submit-btn { width: 100%; background: #39C5BB; color: white; padding: 14px; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 10px; transition: 0.2s; }
-.submit-btn:hover { background: #26a69a; }
-.submit-btn:disabled { opacity: 0.6; }
+.upload-placeholder { color: #999; font-size: 14px; }
+
+.checkbox-row label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: normal; }
+
+.actions { display: flex; gap: 15px; margin-top: 30px; }
+button { flex: 1; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; border: none; font-size: 16px; }
+.btn-submit { background: #39C5BB; color: white; }
+.btn-submit:disabled { background: #ccc; cursor: not-allowed; }
+.btn-cancel { background: #eee; color: #666; }
 </style>

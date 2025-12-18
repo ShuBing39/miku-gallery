@@ -1,7 +1,6 @@
-import { createClient } from '@supabase/supabase-js'
+// src/supabase.js
+// 这是一个“替身”文件。
+// 它不创建新客户端，而是直接把 services 里的那个单例拿过来用。
+// 这样就保证了全站只有一个 Supabase 实例。
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-
-// 创建单例客户端
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export { supabase } from './services/supabase'

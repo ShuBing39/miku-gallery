@@ -111,3 +111,70 @@ export const logSystemAction = async (projectId, userId, content) => {
     type: 'system'
   })
 }
+// ... (保留之前的 getProjectDetail 等代码) ...
+
+// --- 新增：列表与加入逻辑 ---
+
+// 获取企划列表
+export const getProjectsList = async (search = '') => {
+    let query = supabase
+      .from('projects')
+      .select('*')
+      .eq('allow_external', true)
+      .order('created_at', { ascending: false })
+  
+    if (search) {
+      query = query.ilike('name', `%${search}%`)
+    }
+  
+    const { data, error } = await query
+    if (error) throw error
+    if (!data || data.length === 0) return []
+  
+    // 补全发布者名称 (为了减少数据库压力，这里手动聚合查询发布者)
+    const userIds = [...new Set(data.map(p => p.uploader_id).filter(Boolean))]
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, username')
+        .in('id', userIds)
+      
+      const map = {}
+      profiles?.forEach(p => map[p.id] = p.username)
+      
+      return data.map(p => ({
+        ...p,
+        uploader_name: map[p.uploader_id] || '未知用户'
+      }))
+    }
+  
+    return data
+  }
+  
+  // 通过邀请码加入
+  export const joinProjectByCode = async (inviteCode, userId, userName) => {
+    const { data, error } = await supabase.rpc('join_project_by_invite_code', {
+      p_code: inviteCode,
+      p_user_id: userId
+    })
+  
+    if (error) throw error
+    
+    if (data.success) {
+      // 自动发系统通知
+      await supabase.from('project_comments').insert({
+        project_id: data.project_id,
+        content: `🎉 ${userName} 通过邀请码加入了团队！`,
+        type: 'system',
+        user_id: userId
+      })
+      return data.project_id
+    } else {
+      throw new Error('邀请码无效或已过期')
+    }
+  }
+  
+  // 增加浏览量
+  export const incrementView = async (id) => {
+    await supabase.rpc('increment_project_view', { row_id: id })
+  }
