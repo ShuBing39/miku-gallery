@@ -26,6 +26,11 @@ import ProjectsView from '../views/Projects.vue'
 import SubmitWork from '../views/SubmitWork.vue'
 import SubmitProject from '../views/SubmitProject.vue' 
 
+import EncyclopediaView from '../views/EncyclopediaView.vue'
+import EncyclopediaEdit from '../views/EncyclopediaEdit.vue'
+
+import TicketCenter from '../views/TicketCenter.vue'
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -97,6 +102,26 @@ const router = createRouter({
       component: AdminDashboard, 
       meta: { requiresAuth: true } 
     },
+    {
+      path: '/encyclopedia',
+      name: 'encyclopedia',
+      component: EncyclopediaView
+    },
+
+    {
+      path: '/encyclopedia/edit',
+      name: 'encyclopedia-edit',
+      component: EncyclopediaEdit,
+      meta: { requiresAuth: true }
+    },
+
+    { 
+      path: '/tickets', 
+      name: 'tickets', 
+      component: TicketCenter, 
+      meta: { requiresAuth: true } 
+    },
+
     
     // 登录注册及周边详情页
     { path: '/login', name: 'login', component: LoginView },
