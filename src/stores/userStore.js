@@ -1,42 +1,45 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { supabase } from '../services/supabase' 
+// ✅ 关键修复：这里的路径改为了 ../supabase，指向第一步创建的文件
+import { supabase } from '../supabase' 
 
 export const useUserStore = defineStore('user', () => {
-  const user = ref(null)      // Supabase Auth 对象 (包含 email, id)
-  const profile = ref(null)   // 数据库 profiles 表对象 (包含 uid, username, avatar_url)
+  const user = ref(null)
+  const profile = ref(null)
   const session = ref(null)
-  const loading = ref(true)
+  const loading = ref(false)
 
+  // 初始化用户状态
   const initialize = async () => {
     loading.value = true
-    
-    // 1. 获取 Session
-    const { data } = await supabase.auth.getSession()
-    session.value = data.session
-    user.value = data.session?.user || null
-
-    // 2. 如果已登录，去抓取 Profile (获取 UID)
-    if (user.value) {
-      await fetchProfile(user.value.id)
-    }
-
-    // 3. 监听状态变化
-    supabase.auth.onAuthStateChange(async (_event, _session) => {
-      session.value = _session
-      user.value = _session?.user || null
+    try {
+      // 获取当前会话
+      const { data } = await supabase.auth.getSession()
+      session.value = data.session
+      user.value = data.session?.user || null
       
-      if (_session?.user) {
-        await fetchProfile(_session.user.id)
-      } else {
-        profile.value = null
+      if (user.value) {
+        await fetchProfile(user.value.id)
       }
-    })
-    
-    loading.value = false
+
+      // 监听登录状态变化 (比如用户在别的标签页登出了)
+      supabase.auth.onAuthStateChange(async (_event, _session) => {
+        session.value = _session
+        user.value = _session?.user || null
+        if (_session?.user) {
+            await fetchProfile(_session.user.id)
+        } else {
+            profile.value = null
+        }
+      })
+    } catch (e) {
+      console.error('Store 初始化失败:', e)
+    } finally {
+      loading.value = false
+    }
   }
 
-  // 🔎 专门获取用户档案的函数
+  // 获取用户详细资料
   const fetchProfile = async (userId) => {
     try {
       const { data, error } = await supabase
@@ -45,20 +48,35 @@ export const useUserStore = defineStore('user', () => {
         .eq('id', userId)
         .single()
       
-      if (!error && data) {
-        profile.value = data
+      if (error && error.code !== 'PGRST116') { // 忽略"找不到数据"的错误
+        console.error('获取个人资料失败:', error)
       }
-    } catch (e) {
-      console.error('获取用户信息失败:', e)
-    }
+      if (data) profile.value = data
+    } catch (e) { console.error(e) }
   }
 
+  // 登录动作
+  const login = async (email, password) => {
+    // 1. 调用 Supabase 登录
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw error
+
+    // 2. 登录成功，更新本地状态
+    if (data.user) {
+        user.value = data.user
+        session.value = data.session
+        await fetchProfile(data.user.id)
+    }
+    return data
+  }
+
+  // 退出登录
   const logout = async () => {
     await supabase.auth.signOut()
     user.value = null
-    profile.value = null // 清空 profile
+    profile.value = null
     session.value = null
   }
 
-  return { user, profile, session, loading, initialize, logout }
+  return { user, profile, session, loading, initialize, login, logout }
 })
