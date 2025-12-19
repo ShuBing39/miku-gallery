@@ -18,7 +18,7 @@
               <div class="author-bar">
                   <img :src="detail.profiles?.avatar_url || 'https://placehold.co/50'" class="avatar">
                   <div class="author-info">
-                      <div class="name">{{ detail.profiles?.nickname || '匿名团长' }}</div>
+                      <div class="name">{{ detail.profiles?.username || '未知团长' }}</div>
                       <div class="time">发布于 {{ formatDate(detail.created_at) }}</div>
                   </div>
               </div>
@@ -156,7 +156,6 @@
   const detail = ref(null)
   const loading = ref(true)
   
-  // 数据容器
   const items = ref([])
   const rules = ref({})
   const contact = ref({})
@@ -168,8 +167,7 @@
     const id = route.params.id
     if(!id) return
   
-    // 🔴 修复核心：不再联表查询，防止 400 Bad Request
-    // 1. 先查企划本体
+    // 1. 查企划
     const { data: projectData, error: pError } = await supabase
       .from('projects')
       .select('*')
@@ -183,24 +181,29 @@
     }
   
     if (projectData) {
-      // 2. 如果有团长ID，单独去查团长信息 (手动拼装)
+      projectData.profiles = { username: '未知用户', avatar_url: '' }
+  
+      // 2. 查团长 (✅ 修正：查 username)
       if (projectData.uploader_id) {
-          const { data: userData } = await supabase
-              .from('profiles')
-              .select('nickname, avatar_url')
-              .eq('id', projectData.uploader_id)
-              .single()
-          
-          // 把查到的团长信息塞进去
-          projectData.profiles = userData || { nickname: '未知用户', avatar_url: '' }
-      } else {
-          projectData.profiles = { nickname: '未知用户', avatar_url: '' }
+          try {
+              const { data: userData, error: uError } = await supabase
+                  .from('profiles')
+                  .select('username, avatar_url') // 👈 改成了 username
+                  .eq('id', projectData.uploader_id)
+                  .single()
+              
+              if (!uError && userData) {
+                  projectData.profiles = userData
+              }
+          } catch(err) {
+              console.warn('团长信息获取失败(已忽略):', err)
+          }
       }
   
       detail.value = projectData
       
+      // 解析 description JSON
       try {
-          // 解析 JSON
           let content = projectData.description
           if (typeof content === 'string') content = JSON.parse(content)
           
@@ -220,7 +223,7 @@
     loading.value = false
   })
   
-  // === 计算逻辑 (完全复用 Step 2 的算法) ===
+  // 计算逻辑
   const calculateBase = (jpy) => {
       const rate = settings.value.exchange_rate || 0.055
       const fee = settings.value.calculated_fee || 0
@@ -233,7 +236,6 @@
       return base + adjust
   }
   
-  // === 辅助显示函数 ===
   const formatDate = (s) => new Date(s).toLocaleDateString()
   const formatAdjust = (val) => val > 0 ? `+${val}` : (val < 0 ? `${val}` : '-')
   const getAdjustClass = (val) => val > 0 ? 'text-red' : (val < 0 ? 'text-blue' : 'text-gray')
@@ -256,16 +258,12 @@
   </script>
   
   <style scoped>
-  /* 全局重置 */
   .gb-container { background: #f0f2f5; min-height: 100vh; font-family: -apple-system, sans-serif; padding: 20px; color: #333; }
   .gb-layout { max-width: 1100px; margin: 0 auto; display: flex; gap: 20px; align-items: flex-start; }
   
-  /* 左侧主栏 */
   .main-col { flex: 1; min-width: 0; }
-  /* 右侧边栏 */
   .side-col { width: 320px; position: sticky; top: 20px; display: flex; flex-direction: column; gap: 15px; }
   
-  /* 1. Header */
   .gb-header { background: white; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
   .header-top { display: flex; gap: 10px; margin-bottom: 10px; }
   .tag-status { background: #e8f5e9; color: #2e7d32; font-weight: bold; font-size: 12px; padding: 2px 8px; border-radius: 4px; }
@@ -276,13 +274,11 @@
   .name { font-weight: bold; font-size: 14px; }
   .time { font-size: 12px; color: #999; }
   
-  /* 通用内容块 */
   .section-box { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
   .box-title { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 15px; border-bottom: 1px solid #f5f5f5; padding-bottom: 10px; }
   .box-title h3 { margin: 0; font-size: 16px; border-left: 4px solid #39C5BB; padding-left: 10px; }
   .box-title .sub { font-size: 12px; color: #999; }
   
-  /* 2. 盲抽表格 */
   .blind-table { width: 100%; font-size: 13px; border-collapse: collapse; }
   .blind-table th { text-align: left; color: #999; padding: 8px; font-weight: normal; border-bottom: 1px solid #eee; }
   .blind-table td { padding: 10px 8px; border-bottom: 1px solid #f9f9f9; }
@@ -291,7 +287,6 @@
   .text-gray { color: #ccc; }
   .price-final { font-weight: bold; color: #f57c00; font-size: 15px; }
   
-  /* 3. 商品网格 */
   .goods-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
   .goods-card { border: 1px solid #eee; border-radius: 8px; overflow: hidden; transition: 0.2s; }
   .goods-card:hover { border-color: #39C5BB; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
@@ -311,7 +306,6 @@
   .btn-pick:hover:not(:disabled) { background: #39C5BB; color: white; }
   .btn-pick:disabled { border-color: #eee; color: #ccc; cursor: not-allowed; }
   
-  /* 侧边栏卡片 */
   .side-card { background: white; border-radius: 12px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
   .card-head { font-weight: bold; font-size: 14px; margin-bottom: 12px; color: #444; }
   .formula-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; color: #666; }
