@@ -19,65 +19,44 @@ const MAX_PAGES = 500;
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// 📅 智能日期提取器 (V2.0)
-// 目标：提取 "文章发布日" 和 "活动结束日"
 function analyzeDates(html, bodyText) {
   const $ = cheerio.load(html);
-  
-  // 1. 获取文章发布日期 (基础)
   let publishDate = null;
   let dateText = $('.entry-date').text() || $('.published').text() || $('.date').text();
   if (dateText) {
     const match = dateText.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
     if (match) publishDate = `${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`;
   }
-  if (!publishDate) publishDate = new Date().toISOString().split('T')[0]; // 兜底
+  if (!publishDate) publishDate = new Date().toISOString().split('T')[0]; 
 
-  // 2. 🕵️‍♂️ 侦测活动真实时间 (进阶)
-  // 我们试图寻找 “~ M月D日” 或者 “～ M月D日” 这种模式，通常表示结束时间
-  // 还要寻找年份，防止跨年活动出错
   let eventEndDate = null;
-  let eventStartDate = publishDate; // 默认开始时间是发布日，除非找到更晚的日期
+  let eventStartDate = publishDate;
 
-  // 匹配模式： "2月4日（火）～2月11日（火）" 或 "2025年2月4日..."
-  // 这里的正则比较宽泛，为了尽可能捕获
   const periodRegex = /(\d{4}年)?(\d{1,2})月(\d{1,2})日\s*[（(].*?[）)]?\s*[～~]\s*(\d{1,2})月(\d{1,2})日/;
   const match = bodyText.match(periodRegex);
 
   if (match) {
-    // match[1] = 年份 (可能为空), match[4] = 结束月, match[5] = 结束日
     const currentYear = match[1] ? match[1].replace('年', '') : new Date(publishDate).getFullYear();
     const endMonth = match[4].padStart(2, '0');
     const endDay = match[5].padStart(2, '0');
-    
-    // 组装结束日期
     eventEndDate = `${currentYear}-${endMonth}-${endDay}`;
-
-    // 如果结束日期比发布日期还早 (跨年了?)，可能年份要+1
     if (eventEndDate < publishDate && !match[1]) {
        eventEndDate = `${parseInt(currentYear) + 1}-${endMonth}-${endDay}`;
     }
-
-    // 如果找到了范围，开始日期也可以优化 (match[2], match[3])
     if (match[2] && match[3]) {
         const startMonth = match[2].padStart(2, '0');
         const startDay = match[3].padStart(2, '0');
         eventStartDate = `${currentYear}-${startMonth}-${startDay}`;
     }
   } else {
-    // 如果找不到明确的时间范围，默认给一个宽限期
-    // 比如演唱会或活动通常在发布后会持续 1-2 个月
-    // 为了不让它立刻变灰，我们假设它有效期为发布后 30 天
-    // *注意：这只是权宜之计，最好还是人工后台修正，但爬虫能做个大概*
     const d = new Date(publishDate);
-    d.setDate(d.getDate() + 30); // 默认有效期30天
+    d.setDate(d.getDate() + 30); 
     eventEndDate = d.toISOString().split('T')[0];
   }
 
   return { publishDate, eventStartDate, eventEndDate };
 }
 
-// 🕵️‍♂️ 角色探测
 function findCharactersInText(text) {
   const found = new Set();
   const lower = text.toLowerCase();
@@ -90,11 +69,14 @@ function findCharactersInText(text) {
   return found;
 }
 
-// ✨ 元数据分析
 function analyzeEventMetadata($, title) {
   const images = [];
   $('.entry-content img').each((i, el) => {
-    const src = $(el).attr('src');
+    let src = $(el).attr('src');
+    // 🟢 修复：强制 HTTPS
+    if (src && src.startsWith('http://')) {
+        src = src.replace('http://', 'https://');
+    }
     if (src && !src.includes('avatar') && !src.includes('icon') && !src.includes('banner')) images.push(src);
   });
 
@@ -125,7 +107,7 @@ function analyzeEventMetadata($, title) {
 }
 
 async function scrapeEvents() {
-  console.log(`🚀 启动【活动情报爬虫 V2 - 智能日期版】...`);
+  console.log(`🚀 启动【活动情报爬虫 V2 - HTTPS 修复版】...`);
   
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -150,7 +132,6 @@ async function scrapeEvents() {
       if (links.length === 0) break;
 
       for (const detailUrl of links) {
-        // 我们这次每次都更新，因为我们要修正日期逻辑
         const { data: existing } = await supabase.from('items').select('id').eq('link', detailUrl).single();
         
         try {
@@ -160,7 +141,6 @@ async function scrapeEvents() {
           const title = $('.entry-title').text().trim();
           const { images, externalLink, character, category, fullText } = analyzeEventMetadata($, title);
           
-          // 🔥 关键：智能日期分析
           const { publishDate, eventStartDate, eventEndDate } = analyzeDates(detailResponse.data, fullText);
 
           const mainImage = images.length > 0 ? images[0] : null; 
@@ -174,10 +154,7 @@ async function scrapeEvents() {
             character: character, 
             category: category, 
             author: '官方', 
-            // 🔥 这里做个区分：
-            // release_date 用来排序（用活动开始时间，这样未来的活动会排在最上面）
             release_date: eventStartDate, 
-            // event_end_date 用来判断是否结束
             event_end_date: eventEndDate,
             is_ai: false 
           };
@@ -185,11 +162,11 @@ async function scrapeEvents() {
           let itemId = null;
 
           if (existing) {
-             process.stdout.write(`   🔄 更新 [${category}] ${eventStartDate}~${eventEndDate} `);
+             process.stdout.write(`   🔄 更新 [${category}] `);
              await supabase.from('items').update(itemData).eq('id', existing.id);
              itemId = existing.id;
           } else {
-             process.stdout.write(`   🆕 新增 [${category}] ${eventStartDate}~${eventEndDate} `);
+             process.stdout.write(`   🆕 新增 [${category}] `);
              const { data: newItem, error } = await supabase.from('items').insert([itemData]).select();
              if (!error && newItem) itemId = newItem[0].id;
           }

@@ -10,7 +10,7 @@
       
       <div class="top-section">
         <div class="img-box">
-          <img :src="item.image_url" class="main-img" @click="openLightbox" />
+          <img :src="fixUrl(item.image_url)" class="main-img" @click="openLightbox" />
         </div>
         
         <div class="info-box">
@@ -80,7 +80,7 @@
     </div>
 
     <div v-if="showLightbox" class="lightbox" @click="showLightbox = false">
-      <img :src="item.image_url" />
+      <img :src="fixUrl(item.image_url)" />
     </div>
   </div>
 </template>
@@ -90,7 +90,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '../stores/userStore'
 import { getItemDetail, getItemComments, postItemComment } from '../services/itemData'
-import { formatDate } from '../utils/formatters'
+import { formatDate, fixUrl } from '../utils/formatters' // 🟢 引入 fixUrl
 
 const route = useRoute()
 const userStore = useUserStore()

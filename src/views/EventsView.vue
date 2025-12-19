@@ -24,7 +24,7 @@
     <div v-else-if="events.length > 0" class="events-list">
       <div v-for="ev in events" :key="ev.id" class="event-card" @click="goDetail(ev)">
         <div class="poster-wrapper">
-          <img :src="ev.image_url" loading="lazy" />
+          <img :src="fixUrl(ev.image_url)" loading="lazy" />
           <div class="status-overlay" :class="getStatus(ev).class">
             {{ getStatus(ev).text }}
           </div>
@@ -54,6 +54,7 @@ import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getEvents } from '../services/eventData'
 import { OFFICIAL_EVENT_CATEGORIES } from '../constants'
+import { fixUrl } from '../utils/formatters' // 🟢 引入 fixUrl
 
 const router = useRouter()
 const loading = ref(true)
@@ -82,20 +83,17 @@ const loadEvents = async () => {
 }
 
 const goDetail = (ev) => {
-  // ✅ 关键修改：跳转到专属的 EventDetail 页面
   router.push(`/event/${ev.id}`)
 }
 
 const getStatus = (ev) => {
   const today = new Date().toISOString().split('T')[0]
   if (ev.release_date && today < ev.release_date) return { text: '即将开始', class: 'upcoming' }
-  // 如果有结束日期且今天已经过了结束日期，显示已结束
   if (ev.event_end_date && today > ev.event_end_date) return { text: '已结束', class: 'ended' }
   return { text: '进行中', class: 'active' }
 }
 
 const formatDateRange = (ev) => {
-  // 简单的日期格式化
   const start = ev.release_date ? ev.release_date.split('T')[0].replace(/-/g, '/') : '待定'
   const end = ev.event_end_date ? ev.event_end_date.split('T')[0].replace(/-/g, '/') : '待定'
   return `${start} ~ ${end}`

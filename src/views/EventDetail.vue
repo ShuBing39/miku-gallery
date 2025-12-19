@@ -10,7 +10,7 @@
   
         <div class="hero-section">
           <div class="poster-area">
-            <img :src="event.image_url" class="poster-img" />
+            <img :src="fixUrl(event.image_url)" class="poster-img" />
           </div>
           
           <div class="info-area">
@@ -61,7 +61,8 @@
   <script setup>
   import { ref, onMounted } from 'vue'
   import { useRoute } from 'vue-router'
-  import { getItemDetail } from '../services/itemData' // 复用获取数据的接口是没问题的，只是展示页面变了
+  import { getItemDetail } from '../services/itemData'
+  import { fixUrl } from '../utils/formatters' // 🟢 引入 fixUrl
   
   const route = useRoute()
   const event = ref(null)
@@ -70,7 +71,6 @@
   onMounted(async () => {
     loading.value = true
     try {
-      // 即使是活动，底层也是存储在 items 表里的，所以可以用这个函数查
       event.value = await getItemDetail(route.params.id)
     } catch (e) {
       console.error(e)
@@ -80,7 +80,6 @@
   })
   
   const goOfficial = () => {
-    // 优先跳转 external_link (如果有)，其次是 link (爬虫源地址)
     const url = event.value.external_link || event.value.link
     if (url) {
       window.open(url, '_blank')

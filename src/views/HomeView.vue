@@ -7,7 +7,7 @@
           :key="b.id" 
           class="banner-slide" 
           :class="{ active: index === activeIndex }"
-          :style="{ backgroundImage: `url(${b.image_url})` }"
+          :style="{ backgroundImage: `url(${fixUrl(b.image_url)})` }"
           @click="handleBannerClick(b)"
         >
           <div v-if="b.title || b.description" class="banner-text">
@@ -47,7 +47,7 @@
         <div v-if="loading" class="loading-skel">加载中...</div>
         <div v-else class="item-list">
           <div v-for="item in latestGoods" :key="item.id" class="list-item" @click="handleItemClick(item)">
-            <img :src="item.image_url" class="item-thumb" referrerpolicy="no-referrer" @error="handleImgError"/>
+            <img :src="fixUrl(item.image_url)" class="item-thumb" referrerpolicy="no-referrer" @error="handleImgError"/>
             <div class="item-info"><h4 class="item-title">{{ item.name }}</h4><div class="item-meta"><span class="date">{{ formatDate(item.release_date) }}</span><span class="tag cat">{{ item.category }}</span></div></div>
           </div>
         </div>
@@ -58,7 +58,7 @@
         <div v-if="loading" class="loading-skel">加载中...</div>
         <div v-else class="item-list">
           <div v-for="ev in mixedEvents" :key="ev.uniqueId" class="list-item event-style" @click="handleItemClick(ev)">
-            <img :src="ev.image_url" class="item-thumb" referrerpolicy="no-referrer" @error="handleImgError"/>
+            <img :src="fixUrl(ev.image_url)" class="item-thumb" referrerpolicy="no-referrer" @error="handleImgError"/>
             <div class="item-info"><h4 class="item-title">{{ ev.name }}</h4><div class="item-meta"><span class="status-badge" :class="ev.statusClass">{{ ev.statusText }}</span><span class="tag" :class="ev.isProject ? 'proj-tag' : 'evt-tag'">{{ ev.category }}</span></div></div>
           </div>
         </div>
@@ -71,7 +71,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '../services/supabase'
-import { formatDate, handleImgError } from '../utils/formatters'
+import { formatDate, handleImgError, fixUrl } from '../utils/formatters' // 🟢 引入 fixUrl
 
 const router = useRouter()
 const latestGoods = ref([])
@@ -85,16 +85,11 @@ let timer = null
 const OFFICIAL_EVENT_CATEGORIES = ['魔法未来', '雪未来', 'MIKU EXPO', '交响乐会', '演唱会', '联动/咖啡厅', '展览/漫展', '线下活动', '同人活动']
 
 onMounted(() => {
-  // 核心优化：并行启动，但不阻塞
   loading.value = true
-  
-  // 1. 异步加载轮播图 (不等待它完成)
   fetchBanners().then(data => {
     banners.value = data
     startCarousel()
   })
-
-  // 2. 加载主要数据，必须等待，但完成后立刻停止转圈
   fetchData().finally(() => {
     loading.value = false
   })
@@ -117,33 +112,16 @@ const startCarousel = () => {
 }
 
 const fetchData = async () => {
-  // 1. 获取最新周边 (只取必要字段，加速)
-  const { data: rawItems } = await supabase
-    .from('items')
-    .select('id, name, image_url, category, release_date, status')
-    .eq('status', 'approved')
-    .order('created_at', { ascending: false })
-    .limit(30) // 限制数量
-
+  const { data: rawItems } = await supabase.from('items').select('id, name, image_url, category, release_date, status').eq('status', 'approved').order('created_at', { ascending: false }).limit(30)
   if (rawItems) {
-    // 前端简单过滤 (因为数量已限制，这里过滤很快)
-    latestGoods.value = rawItems.filter(i => 
-      !OFFICIAL_EVENT_CATEGORIES.includes(i.category) && 
-      i.category !== '同人企划' && 
-      i.category !== '企划'
-    ).slice(0, 5)
+    latestGoods.value = rawItems.filter(i => !OFFICIAL_EVENT_CATEGORIES.includes(i.category) && i.category !== '同人企划' && i.category !== '企划').slice(0, 5)
   }
-
-  // 2. 获取混合动态
   const p1 = supabase.from('items').select('id, name, image_url, category, release_date, event_end_date').in('category', OFFICIAL_EVENT_CATEGORIES).eq('status', 'approved').order('created_at', { ascending: false }).limit(5)
   const p2 = supabase.from('projects').select('id, name, image_url, recruit_status, created_at').eq('allow_external', true).neq('recruit_status', 'ended').order('created_at', { ascending: false }).limit(5)
-  
   const [res1, res2] = await Promise.all([p1, p2])
-  
   let combined = []
   if (res1.data) combined = res1.data.map(e => ({ ...e, isProject: false, uniqueId: 'ev_' + e.id, statusClass: getEventStatus(e).class, statusText: getEventStatus(e).text }))
   if (res2.data) { const projectsMapped = res2.data.map(p => ({ id: p.id, name: p.name, image_url: p.image_url, category: '同人企划', created_at: p.created_at, isProject: true, uniqueId: 'pj_' + p.id, statusClass: p.recruit_status === 'recruiting' ? 'active' : 'ended', statusText: p.recruit_status === 'recruiting' ? '招募中' : (p.recruit_status === 'ongoing' ? '进行中' : '已结束') })); combined = [...combined, ...projectsMapped] }
-  
   combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   mixedEvents.value = combined.slice(0, 6)
 }

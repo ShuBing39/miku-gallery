@@ -36,7 +36,6 @@ function extractDateFromHTML(html) {
   return null;
 }
 
-// 🕵️‍♂️ 角色探测器 (保持不变)
 function findCharactersInText(text) {
   const found = new Set();
   const lower = text.toLowerCase();
@@ -77,7 +76,6 @@ function findCharactersInText(text) {
   return found;
 }
 
-// 🎨 画师提取 (保持不变)
 function extractAuthors(text) {
   const authors = new Set();
   const cleanText = text.replace(/<[^>]*>/g, ''); 
@@ -91,11 +89,14 @@ function extractAuthors(text) {
   return Array.from(authors).join(' / ');
 }
 
-// ✨ 核心逻辑 v6.0：细分分类识别
 function analyzeMetadata($, title) {
   const images = [];
   $('.entry-content img').each((i, el) => {
-    const src = $(el).attr('src');
+    let src = $(el).attr('src');
+    // 🟢 修复：强制 HTTPS
+    if (src && src.startsWith('http://')) {
+        src = src.replace('http://', 'https://');
+    }
     if (src && !src.includes('avatar') && !src.includes('icon') && !src.includes('banner')) images.push(src);
   });
 
@@ -112,7 +113,6 @@ function analyzeMetadata($, title) {
   const tagString = tags.join(' ');
   const fullText = `${title} ${tagString}`; 
 
-  // 4. 角色判决
   let character = '其他/混合';
   let titleChars = findCharactersInText(title);
   if (titleChars.size === 0) titleChars = findCharactersInText(tagString);
@@ -128,20 +128,16 @@ function analyzeMetadata($, title) {
     else character = '初音未来'; 
   }
 
-  // 📦 5. 分类识别 (细分版)
   let category = '其他周边'; 
-  
   if (fullText.includes('フィギュア') || fullText.includes('ねんどろいど') || fullText.includes('スケール') || fullText.includes('ドール')) category = '手办模型';
   else if (fullText.includes('ぬいぐるみ') || fullText.includes('マスコット') || fullText.includes('ふかふか') || fullText.includes('どでかジャンボ') || fullText.includes('寝そべり')) category = '毛绒玩偶';
   else if (fullText.includes('Tシャツ') || fullText.includes('パーカー') || fullText.includes('ファッション') || fullText.includes('リュック') || fullText.includes('法被') || fullText.includes('スニーカー')) category = '服饰穿搭';
   else if (fullText.includes('CD') || fullText.includes('アルバム') || fullText.includes('楽曲') || fullText.includes('ソング')) category = '音乐/CD';
   else if (fullText.includes('画集') || fullText.includes('ビジュアル') || fullText.includes('ブック')) category = '书籍/画册';
   else if (fullText.includes('イベント') || fullText.includes('ライブ') || fullText.includes('マジカルミライ') || fullText.includes('SNOW MIKU')) category = '线下活动';
-  // ✨ 新增细分分类
   else if (fullText.includes('缶バッジ') || fullText.includes('ピンズ')) category = '徽章/吧唧';
   else if (fullText.includes('ペンライト') || fullText.includes('サイリウム') || fullText.includes('応援')) category = '应援棒/灯';
   else if (fullText.includes('お菓子') || fullText.includes('食品') || fullText.includes('カレー') || fullText.includes('ラーメン') || fullText.includes('ドリンク') || fullText.includes('茶')) category = '食品/饮料';
-  // 兜底的小谷子
   else if (fullText.includes('アクリル') || fullText.includes('キーホルダー') || fullText.includes('スタンド') || fullText.includes('クリアファイル') || fullText.includes('グッズ')) category = '小谷子/立牌';
   else if (fullText.includes('ゲーム') || fullText.includes('コラボ')) category = '游戏联动';
 
@@ -152,7 +148,7 @@ function analyzeMetadata($, title) {
 }
 
 async function scrapeAllPages() {
-  console.log(`🚀 启动【V6.0 细分分类版】爬虫...`);
+  console.log(`🚀 启动【V6.0 HTTPS 修复版】爬虫...`);
   
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
