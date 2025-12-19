@@ -1,6 +1,8 @@
 import { supabase } from './supabase'
 
-// 获取项目详情 (带发布者名)
+// ---------------------------------------------------------
+// 1. 核心查询：获取项目详情 (保留了你原本的发布者关联逻辑)
+// ---------------------------------------------------------
 export const getProjectDetail = async (id) => {
   const { data, error } = await supabase.from('projects').select('*').eq('id', id).single()
   if (error) throw error
@@ -12,8 +14,71 @@ export const getProjectDetail = async (id) => {
   return data
 }
 
-// 获取关联数据 (时间轴、任务、成员、评论)
-// helper: 自动映射用户信息
+// 【修复补丁】别名兼容：防止组件调用 getProjectById 报错
+export const getProjectById = getProjectDetail;
+
+
+// ---------------------------------------------------------
+// 2. 核心查询：获取项目列表 (保留了你原本的搜索和用户映射逻辑)
+// ---------------------------------------------------------
+export const getProjectsList = async (search = '') => {
+  let query = supabase
+    .from('projects')
+    .select('*')
+    .eq('allow_external', true)
+    .order('created_at', { ascending: false })
+
+  if (search) {
+    query = query.ilike('name', `%${search}%`)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+  if (!data || data.length === 0) return []
+
+  // 补全发布者名称
+  const userIds = [...new Set(data.map(p => p.uploader_id).filter(Boolean))]
+  if (userIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, username')
+      .in('id', userIds)
+    
+    const map = {}
+    profiles?.forEach(p => map[p.id] = p.username)
+    
+    return data.map(p => ({
+      ...p,
+      uploader_name: map[p.uploader_id] || '未知用户'
+    }))
+  }
+
+  return data
+}
+
+// 【修复补丁】新增：获取推荐/精选企划 (解决 Projects.vue 报错)
+// 逻辑：获取浏览量最高的 3 个正在招募的企划
+export const getPromotedProjects = async () => {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('*')
+    .eq('recruit_status', 'recruiting')
+    .order('view_count', { ascending: false })
+    .limit(3)
+  
+  if (error) {
+    console.error('获取推荐企划失败:', error)
+    return []
+  }
+  return data || []
+}
+
+
+// ---------------------------------------------------------
+// 3. 关联数据获取 (时间轴、成员、评论、任务)
+// ---------------------------------------------------------
+
+// Helper: 自动映射用户信息
 const _mapProfiles = async (items, idField) => {
   if (!items || items.length === 0) return []
   const ids = [...new Set(items.map(i => i[idField]).filter(Boolean))]
@@ -56,15 +121,12 @@ export const getProjectTasks = async (projectId) => {
   if (!tasks) return []
 
   // 1. 映射负责人(单人)
-  let result = await _mapProfiles(tasks, 'assignee_id', 'assignee') // 注意这里mapProfiles需要微调支持targetField，或者我们在组件里处理
-  // 为了简单，我们复用上面的 _mapProfiles 逻辑，它默认映射到 profiles 字段。
-  // 我们手动处理一下单人负责人显示逻辑
+  let result = await _mapProfiles(tasks, 'assignee_id')
   
   // 2. 处理多人认领
   const multiTaskIds = tasks.filter(t => t.is_collaborative).map(t => t.id)
   if (multiTaskIds.length > 0) {
     const { data: claims } = await supabase.from('project_task_claims').select('*').in('task_id', multiTaskIds)
-    // 获取 claim 用户的 profile
     const claimUserIds = [...new Set(claims?.map(c => c.user_id) || [])]
     if (claimUserIds.length > 0) {
       const { data: profiles } = await supabase.from('profiles').select('id, username').in('id', claimUserIds)
@@ -81,7 +143,7 @@ export const getProjectTasks = async (projectId) => {
     }
   }
   
-  // 补充单人负责人的 username (因为 _mapProfiles 把他放到了 profiles 字段)
+  // 补充单人负责人的 username
   result.forEach(t => {
     if (t.profiles) t.assignee = t.profiles
   })
@@ -89,7 +151,11 @@ export const getProjectTasks = async (projectId) => {
   return result
 }
 
-// 写入操作
+
+// ---------------------------------------------------------
+// 4. 写入与交互操作
+// ---------------------------------------------------------
+
 export const addTimelineNode = async (payload) => {
   return supabase.from('project_timeline_v2').insert(payload)
 }
@@ -111,70 +177,30 @@ export const logSystemAction = async (projectId, userId, content) => {
     type: 'system'
   })
 }
-// ... (保留之前的 getProjectDetail 等代码) ...
 
-// --- 新增：列表与加入逻辑 ---
+// 通过邀请码加入
+export const joinProjectByCode = async (inviteCode, userId, userName) => {
+  const { data, error } = await supabase.rpc('join_project_by_invite_code', {
+    p_code: inviteCode,
+    p_user_id: userId
+  })
 
-// 获取企划列表
-export const getProjectsList = async (search = '') => {
-    let query = supabase
-      .from('projects')
-      .select('*')
-      .eq('allow_external', true)
-      .order('created_at', { ascending: false })
+  if (error) throw error
   
-    if (search) {
-      query = query.ilike('name', `%${search}%`)
-    }
-  
-    const { data, error } = await query
-    if (error) throw error
-    if (!data || data.length === 0) return []
-  
-    // 补全发布者名称 (为了减少数据库压力，这里手动聚合查询发布者)
-    const userIds = [...new Set(data.map(p => p.uploader_id).filter(Boolean))]
-    if (userIds.length > 0) {
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, username')
-        .in('id', userIds)
-      
-      const map = {}
-      profiles?.forEach(p => map[p.id] = p.username)
-      
-      return data.map(p => ({
-        ...p,
-        uploader_name: map[p.uploader_id] || '未知用户'
-      }))
-    }
-  
-    return data
-  }
-  
-  // 通过邀请码加入
-  export const joinProjectByCode = async (inviteCode, userId, userName) => {
-    const { data, error } = await supabase.rpc('join_project_by_invite_code', {
-      p_code: inviteCode,
-      p_user_id: userId
+  if (data.success) {
+    await supabase.from('project_comments').insert({
+      project_id: data.project_id,
+      content: `🎉 ${userName} 通过邀请码加入了团队！`,
+      type: 'system',
+      user_id: userId
     })
-  
-    if (error) throw error
-    
-    if (data.success) {
-      // 自动发系统通知
-      await supabase.from('project_comments').insert({
-        project_id: data.project_id,
-        content: `🎉 ${userName} 通过邀请码加入了团队！`,
-        type: 'system',
-        user_id: userId
-      })
-      return data.project_id
-    } else {
-      throw new Error('邀请码无效或已过期')
-    }
+    return data.project_id
+  } else {
+    throw new Error('邀请码无效或已过期')
   }
-  
-  // 增加浏览量
-  export const incrementView = async (id) => {
-    await supabase.rpc('increment_project_view', { row_id: id })
-  }
+}
+
+// 增加浏览量
+export const incrementView = async (id) => {
+  await supabase.rpc('increment_project_view', { row_id: id })
+}

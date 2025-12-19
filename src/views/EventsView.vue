@@ -30,16 +30,15 @@
           </div>
         </div>
         <div class="event-info">
-          <div class="date-badge">
-            <span class="month">{{ getMonth(ev.release_date) }}月</span>
-            <span class="day">{{ getDay(ev.release_date) }}</span>
+          <div class="date-badge-rect">
+            📅 {{ formatDateRange(ev) }}
           </div>
           <div class="info-main">
             <span class="cat-tag">{{ ev.category }}</span>
             <h3>{{ ev.name }}</h3>
-            <p class="loc">📍 {{ ev.author || '地点待定' }}</p>
+            <p class="loc">📍 {{ ev.author || '官方' }}</p>
           </div>
-          <button class="btn-arrow">➔</button>
+          <button class="btn-arrow">查看详情 ➔</button>
         </div>
       </div>
     </div>
@@ -53,7 +52,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { getEvents } from '../services/eventData' // ✅ 使用新服务
+import { getEvents } from '../services/eventData'
 import { OFFICIAL_EVENT_CATEGORIES } from '../constants'
 
 const router = useRouter()
@@ -74,7 +73,6 @@ watch(currentCategory, () => {
 const loadEvents = async () => {
   loading.value = true
   try {
-    // 调用 Service 获取数据
     events.value = await getEvents(currentCategory.value)
   } catch (e) {
     console.error(e)
@@ -84,22 +82,24 @@ const loadEvents = async () => {
 }
 
 const goDetail = (ev) => {
-  if (ev.link && ev.link.startsWith('http')) window.open(ev.link, '_blank')
-  else router.push(`/item/${ev.id}`)
+  // ✅ 关键修改：跳转到专属的 EventDetail 页面
+  router.push(`/event/${ev.id}`)
 }
 
-// 辅助函数
 const getStatus = (ev) => {
   const today = new Date().toISOString().split('T')[0]
   if (ev.release_date && today < ev.release_date) return { text: '即将开始', class: 'upcoming' }
-  // 假设活动结束时间是 release_date 后推3天 (如果没有专门的 end_date 字段)
-  // 实际项目中建议在数据库加 event_end_date 字段
-  if (ev.release_date && today > ev.release_date) return { text: '进行中', class: 'active' }
+  // 如果有结束日期且今天已经过了结束日期，显示已结束
+  if (ev.event_end_date && today > ev.event_end_date) return { text: '已结束', class: 'ended' }
   return { text: '进行中', class: 'active' }
 }
 
-const getMonth = (d) => d ? new Date(d).getMonth() + 1 : '?'
-const getDay = (d) => d ? new Date(d).getDate() : '?'
+const formatDateRange = (ev) => {
+  // 简单的日期格式化
+  const start = ev.release_date ? ev.release_date.split('T')[0].replace(/-/g, '/') : '待定'
+  const end = ev.event_end_date ? ev.event_end_date.split('T')[0].replace(/-/g, '/') : '待定'
+  return `${start} ~ ${end}`
+}
 </script>
 
 <style scoped>
@@ -119,23 +119,23 @@ const getDay = (d) => d ? new Date(d).getDate() : '?'
 .event-card { background: white; border-radius: 12px; overflow: hidden; display: flex; box-shadow: 0 4px 15px rgba(0,0,0,0.05); transition: 0.2s; cursor: pointer; border: 1px solid #eee; }
 .event-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); border-color: #8ec5fc; }
 
-.poster-wrapper { width: 200px; position: relative; flex-shrink: 0; }
+.poster-wrapper { width: 240px; position: relative; flex-shrink: 0; }
 .poster-wrapper img { width: 100%; height: 100%; object-fit: cover; }
 .status-overlay { position: absolute; top: 10px; left: 10px; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; }
 .status-overlay.active { background: #00b894; }
 .status-overlay.upcoming { background: #fdcb6e; color: #333; }
+.status-overlay.ended { background: #b2bec3; }
 
-.event-info { flex: 1; padding: 20px; display: flex; align-items: center; gap: 20px; }
-.date-badge { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 60px; height: 60px; background: #f8f9fa; border-radius: 12px; color: #555; flex-shrink: 0; }
-.month { font-size: 12px; } .day { font-size: 24px; font-weight: bold; color: #8ec5fc; }
+.event-info { flex: 1; padding: 20px; display: flex; flex-direction: column; justify-content: center; position: relative; }
+.date-badge-rect { font-weight: bold; color: #8ec5fc; font-size: 14px; margin-bottom: 8px; background: #f8f9fa; display: inline-block; padding: 4px 10px; border-radius: 6px; align-self: flex-start; }
 
 .info-main { flex: 1; }
 .cat-tag { font-size: 12px; color: #a29bfe; background: #f3f0ff; padding: 2px 8px; border-radius: 4px; }
-.info-main h3 { margin: 8px 0; font-size: 18px; color: #333; }
+.info-main h3 { margin: 8px 0; font-size: 20px; color: #333; }
 .loc { margin: 0; color: #999; font-size: 14px; }
 
-.btn-arrow { width: 40px; height: 40px; border-radius: 50%; border: 1px solid #eee; background: white; color: #ccc; font-size: 18px; cursor: pointer; transition: 0.2s; }
-.event-card:hover .btn-arrow { background: #8ec5fc; color: white; border-color: #8ec5fc; }
+.btn-arrow { margin-top: 15px; align-self: flex-start; border: 1px solid #8ec5fc; color: #8ec5fc; background: white; padding: 6px 15px; border-radius: 20px; cursor: pointer; transition: 0.2s; font-size: 13px; }
+.event-card:hover .btn-arrow { background: #8ec5fc; color: white; }
 
 .empty-state { text-align: center; padding: 60px; color: #aaa; }
 

@@ -1,72 +1,92 @@
 import { supabase } from './supabase'
 import { OFFICIAL_EVENT_CATEGORIES } from '../constants'
 
+// 辅助函数：在数据库层面排除活动和企划
+const applyCategoryFilters = (query) => {
+  if (OFFICIAL_EVENT_CATEGORIES && OFFICIAL_EVENT_CATEGORIES.length > 0) {
+    query = query.not('category', 'in', `(${OFFICIAL_EVENT_CATEGORIES.map(c => `"${c}"`).join(',')})`)
+  }
+  query = query.neq('category', '同人企划')
+  return query
+}
+
 // --- 1. 周边审核 ---
 export const getPendingItems = async () => {
-  const { data, error } = await supabase.from('items')
+  let query = supabase.from('items')
     .select('*')
     .eq('status', 'pending')
-    .not('category', 'in', `(${OFFICIAL_EVENT_CATEGORIES.map(c=>`"${c}"`).join(',')})`)
     .order('created_at', { ascending: false })
-  if (error) throw error
+    .limit(100)
+  
+  query = applyCategoryFilters(query)
+
+  const { data, error } = await query
+  if (error) {
+    console.error('获取待审失败:', error)
+    return []
+  }
   return data || []
 }
 
-export const getItems = async (page = 0, pageSize = 20, search = '') => {
+export const getItems = async (page = 0, pageSize = 50, search = '') => {
   let query = supabase.from('items')
     .select('*')
-    .not('category', 'in', `(${OFFICIAL_EVENT_CATEGORIES.map(c=>`"${c}"`).join(',')})`)
     .order('id', { ascending: false })
     .range(page * pageSize, (page + 1) * pageSize - 1)
   
   if (search) query = query.ilike('name', `%${search}%`)
+  query = applyCategoryFilters(query)
   
   const { data, error } = await query
-  if (error) throw error
+  if (error) return []
   return data || []
 }
 
-// --- 2. 活动/企划审核 ---
+// 新增：更新 Item (用于活动/周边信息的后台修改)
+export const updateItem = async (id, updates) => {
+  const { error } = await supabase.from('items').update(updates).eq('id', id)
+  if (error) throw error
+}
+
+// --- 2. 企划管理 ---
 export const getPendingProjects = async () => {
-  const { data, error } = await supabase.from('items')
+  const { data, error } = await supabase.from('projects')
     .select('*')
-    .eq('category', '同人企划')
-    .eq('status', 'pending')
     .order('created_at', { ascending: false })
-  if (error) throw error
+    .limit(50)
   return data || []
 }
 
+export const updateProjectInfo = async (id, updates) => {
+  const { error } = await supabase.from('projects').update(updates).eq('id', id)
+  if (error) throw error
+}
+
+// --- 3. 活动列表 ---
 export const getEvents = async (search = '') => {
   let query = supabase.from('items')
     .select('*')
     .in('category', OFFICIAL_EVENT_CATEGORIES)
     .order('release_date', { ascending: false })
-    .limit(100)
+    .limit(50)
   
   if (search) query = query.ilike('name', `%${search}%`)
-  
-  const { data, error } = await query
-  if (error) throw error
+  const { data } = await query
   return data || []
 }
 
-// --- 3. 票务/资质审核 ---
+// --- 4. 票务/资质 ---
 export const getPendingVerifications = async () => {
-  const { data, error } = await supabase.from('buyer_verifications')
-    .select('*').eq('status', 'pending').order('created_at')
-  if (error) throw error
+  const { data } = await supabase.from('buyer_verifications').select('*').eq('status', 'pending').order('created_at')
   return data || []
 }
 
 export const getPendingTickets = async () => {
-  const { data, error } = await supabase.from('tickets')
-    .select('*').eq('status', 'pending').order('created_at')
-  if (error) throw error
+  const { data } = await supabase.from('tickets').select('*').eq('status', 'pending').order('created_at')
   return data || []
 }
 
-// --- 4. 通用操作 ---
+// --- 5. 通用操作 ---
 export const auditRecord = async (table, id, status) => {
   const { error } = await supabase.from(table).update({ status }).eq('id', id)
   if (error) throw error
@@ -77,28 +97,27 @@ export const deleteRecord = async (table, id) => {
   if (error) throw error
 }
 
-// --- 5. 邀请码 ---
-export const getInviteCodes = async (unusedOnly = false) => {
-  let query = supabase.from('invite_codes').select('*').order('created_at', { ascending: false })
-  if (unusedOnly) query = query.eq('is_used', false)
-  const { data, error } = await query
-  if (error) throw error
-  return data || []
+// --- 6. 邀请码 ---
+export const getInviteCodes = async () => {
+  const { data, error } = await supabase.from('invite_codes').select('*').order('created_at', { ascending: false })
+  if (error) return []
+  return data.map(c => ({
+    ...c,
+    remaining: (c.max_uses || 1) - (c.used_count || 0)
+  }))
 }
 
-export const createInviteCode = async () => {
+export const createInviteCode = async (maxUses = 1) => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let code = ''
   for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length))
-  const { error } = await supabase.from('invite_codes').insert([{ code, is_used: false }])
+  const { error } = await supabase.from('invite_codes').insert([{ code, max_uses: maxUses }])
   if (error) throw error
 }
 
-// --- 6. 轮播图 ---
+// --- 7. 轮播图 & 百科种子 ---
 export const getBanners = async () => {
-  const { data, error } = await supabase.from('home_banners')
-    .select('*').order('sort_order', { ascending: false })
-  if (error) throw error
+  const { data } = await supabase.from('home_banners').select('*').order('sort_order', { ascending: false })
   return data || []
 }
 
@@ -107,14 +126,13 @@ export const createBanner = async (bannerData) => {
   if (error) throw error
 }
 
-// --- 7. 百科种子 ---
 export const getWikiSeeds = async () => {
-  const { data, error } = await supabase.from('items')
+  let query = supabase.from('items')
     .select('*')
     .eq('status', 'approved')
-    .not('category', 'in', `(${OFFICIAL_EVENT_CATEGORIES.map(c=>`"${c}"`).join(',')})`)
     .order('created_at', { ascending: false })
     .limit(20)
-  if (error) throw error
+  query = applyCategoryFilters(query)
+  const { data } = await query
   return data || []
 }

@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 
-// 获取所有百科词条
+// 1. 获取列表
 export const getEncyclopediaEntries = async (search = '') => {
   let query = supabase
     .from('encyclopedia_entries')
@@ -9,7 +9,8 @@ export const getEncyclopediaEntries = async (search = '') => {
     .order('updated_at', { ascending: false })
 
   if (search) {
-    query = query.or(`title.ilike.%${search}%, tags.cs.{${search}}`) // 搜标题或标签
+    // 搜索标题、标签或分类
+    query = query.or(`title.ilike.%${search}%,tags.cs.{${search}},category.ilike.%${search}%`)
   }
 
   const { data, error } = await query
@@ -17,7 +18,7 @@ export const getEncyclopediaEntries = async (search = '') => {
   return data || []
 }
 
-// 获取单个词条详情
+// 2. 获取详情
 export const getEntryDetail = async (id) => {
   const { data, error } = await supabase
     .from('encyclopedia_entries')
@@ -29,12 +30,30 @@ export const getEntryDetail = async (id) => {
   return data
 }
 
-// 提交/更新词条
+// 3. 【核心修复】保存/发布词条
 export const saveEntry = async (entryData) => {
-  // 假设有表 encyclopedia_entries: id, title, content, category, tags, author_id, is_published
-  const { error } = await supabase
+  // 确保数据符合数据库结构
+  const payload = {
+    title: entryData.title,
+    content: entryData.content,
+    category: entryData.category,
+    tags: entryData.tags || [], // 确保是数组
+    image_url: entryData.image_url,
+    author_id: entryData.author_id,
+    is_published: true,
+    updated_at: new Date()
+  }
+
+  // 如果有ID则是更新，没有则是新增
+  if (entryData.id) {
+    payload.id = entryData.id
+  }
+
+  const { data, error } = await supabase
     .from('encyclopedia_entries')
-    .upsert(entryData)
+    .upsert(payload)
+    .select()
   
   if (error) throw error
+  return data
 }

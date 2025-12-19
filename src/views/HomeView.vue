@@ -21,7 +21,7 @@
       </div>
       <div v-else class="banner-content default-banner">
         <img src="https://ec.crypton.co.jp/pages/prod/vocaloid/img/main_mikuv4x_b.png" class="banner-bg" />
-        <div class="banner-text"><h2>Miku Expo 10th Anniversary</h2><p>庆祝初音未来世界巡演十周年</p></div>
+        <div class="banner-text"><h2>Miku World</h2><p>Loading...</p></div>
       </div>
     </div>
 
@@ -52,6 +52,7 @@
           </div>
         </div>
       </div>
+      
       <div class="section-col">
         <div class="section-header"><h3>📡 最新活动/企划</h3><span class="more-link" @click="$router.push('/events')">全部情报 ></span></div>
         <div v-if="loading" class="loading-skel">加载中...</div>
@@ -69,9 +70,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-// ✅ 修正引用路径
 import { supabase } from '../services/supabase'
-// ✅ 修正工具引用路径
 import { formatDate, handleImgError } from '../utils/formatters'
 
 const router = useRouter()
@@ -85,38 +84,73 @@ let timer = null
 
 const OFFICIAL_EVENT_CATEGORIES = ['魔法未来', '雪未来', 'MIKU EXPO', '交响乐会', '演唱会', '联动/咖啡厅', '展览/漫展', '线下活动', '同人活动']
 
-onMounted(async () => {
-  await Promise.all([fetchData(), fetchBanners()])
-  startCarousel()
+onMounted(() => {
+  // 核心优化：并行启动，但不阻塞
+  loading.value = true
+  
+  // 1. 异步加载轮播图 (不等待它完成)
+  fetchBanners().then(data => {
+    banners.value = data
+    startCarousel()
+  })
+
+  // 2. 加载主要数据，必须等待，但完成后立刻停止转圈
+  fetchData().finally(() => {
+    loading.value = false
+  })
 })
 
 onUnmounted(() => { if(timer) clearInterval(timer) })
 
 const goToEncyclopedia = () => { if (homeSearch.value.trim()) { router.push({ path: '/encyclopedia', query: { q: homeSearch.value.trim() } }) } else { router.push('/encyclopedia') } }
-const fetchBanners = async () => { const { data } = await supabase.from('home_banners').select('*').eq('is_active', true).order('sort_order', { ascending: false }); if (data) banners.value = data }
-const startCarousel = () => { timer = setInterval(() => { if (banners.value.length > 1) { activeIndex.value = (activeIndex.value + 1) % banners.value.length } }, 5000) }
 const handleBannerClick = (b) => { if (b.link_url) { if (b.link_url.startsWith('http')) window.open(b.link_url, '_blank'); else router.push(b.link_url) } }
 const handleItemClick = (item) => { if (item.isProject) { router.push(`/project/${item.id}`) } else if (item.link && item.link.startsWith('http')) { window.open(item.link, '_blank') } else { router.push(`/item/${item.id}`) } }
 const getEventStatus = (ev) => { const today = new Date().toISOString().split('T')[0]; if (ev.release_date && today < ev.release_date) return { text: '即将开始', class: 'upcoming' }; if (ev.event_end_date && today > ev.event_end_date) return { text: '已结束', class: 'ended' }; return { text: '进行中', class: 'active' } }
 
+const fetchBanners = async () => { 
+  const { data } = await supabase.from('home_banners').select('*').eq('is_active', true).order('sort_order', { ascending: false }); 
+  return data || [] 
+}
+
+const startCarousel = () => { 
+  timer = setInterval(() => { if (banners.value.length > 1) { activeIndex.value = (activeIndex.value + 1) % banners.value.length } }, 5000) 
+}
+
 const fetchData = async () => {
-  loading.value = true
-  const { data: goods } = await supabase.from('items').select('*').not('category', 'in', `(${OFFICIAL_EVENT_CATEGORIES.map(c=>`"${c}"`).join(',')}, "同人企划", "企划")`).eq('status', 'approved').order('created_at', { ascending: false }).limit(5)
-  if (goods) latestGoods.value = goods
-  const p1 = supabase.from('items').select('*').in('category', OFFICIAL_EVENT_CATEGORIES).eq('status', 'approved').order('created_at', { ascending: false }).limit(5)
-  const p2 = supabase.from('projects').select('*').eq('allow_external', true).order('created_at', { ascending: false }).limit(5)
+  // 1. 获取最新周边 (只取必要字段，加速)
+  const { data: rawItems } = await supabase
+    .from('items')
+    .select('id, name, image_url, category, release_date, status')
+    .eq('status', 'approved')
+    .order('created_at', { ascending: false })
+    .limit(30) // 限制数量
+
+  if (rawItems) {
+    // 前端简单过滤 (因为数量已限制，这里过滤很快)
+    latestGoods.value = rawItems.filter(i => 
+      !OFFICIAL_EVENT_CATEGORIES.includes(i.category) && 
+      i.category !== '同人企划' && 
+      i.category !== '企划'
+    ).slice(0, 5)
+  }
+
+  // 2. 获取混合动态
+  const p1 = supabase.from('items').select('id, name, image_url, category, release_date, event_end_date').in('category', OFFICIAL_EVENT_CATEGORIES).eq('status', 'approved').order('created_at', { ascending: false }).limit(5)
+  const p2 = supabase.from('projects').select('id, name, image_url, recruit_status, created_at').eq('allow_external', true).neq('recruit_status', 'ended').order('created_at', { ascending: false }).limit(5)
+  
   const [res1, res2] = await Promise.all([p1, p2])
+  
   let combined = []
   if (res1.data) combined = res1.data.map(e => ({ ...e, isProject: false, uniqueId: 'ev_' + e.id, statusClass: getEventStatus(e).class, statusText: getEventStatus(e).text }))
   if (res2.data) { const projectsMapped = res2.data.map(p => ({ id: p.id, name: p.name, image_url: p.image_url, category: '同人企划', created_at: p.created_at, isProject: true, uniqueId: 'pj_' + p.id, statusClass: p.recruit_status === 'recruiting' ? 'active' : 'ended', statusText: p.recruit_status === 'recruiting' ? '招募中' : (p.recruit_status === 'ongoing' ? '进行中' : '已结束') })); combined = [...combined, ...projectsMapped] }
+  
   combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   mixedEvents.value = combined.slice(0, 6)
-  loading.value = false
 }
 </script>
 
 <style scoped>
-/* 样式保留不变 */
+/* 保持原有样式 */
 .home-container { max-width: 1200px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', sans-serif; color: #333; }
 .hero-search-section { margin-bottom: 30px; display: flex; justify-content: center; }
 .search-wrap { display: flex; width: 100%; max-width: 700px; box-shadow: 0 8px 25px rgba(57, 197, 187, 0.15); border-radius: 40px; background: white; padding: 5px; border: 2px solid #e0f2f1; transition: 0.3s; }
@@ -170,4 +204,5 @@ const fetchData = async () => {
 .status-badge.active { background: #e0f2f1; color: #00695c; }
 .status-badge.upcoming { background: #fff3e0; color: #ef6c00; }
 .status-badge.ended { background: #eee; color: #999; }
+.loading-skel { text-align: center; color: #999; padding: 20px; }
 </style>

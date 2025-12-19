@@ -28,6 +28,27 @@ export const fetchWikiByMonth = async (year, month) => {
   return data || []
 }
 
+// ... (保留原有 import 和函数)
+
+// 检查是否已关注
+export const checkSubscription = async (wikiId, userId) => {
+    const { data } = await supabase.from('wiki_subscriptions')
+      .select('id').match({ wiki_id: wikiId, user_id: userId }).single()
+    return !!data
+  }
+  
+  // 切换关注状态
+  export const toggleSubscription = async (wikiId, userId) => {
+    const isSubbed = await checkSubscription(wikiId, userId)
+    if (isSubbed) {
+      await supabase.from('wiki_subscriptions').delete().match({ wiki_id: wikiId, user_id: userId })
+      return false
+    } else {
+      await supabase.from('wiki_subscriptions').insert({ wiki_id: wikiId, user_id: userId })
+      return true
+    }
+  }
+
 // 搜索数据
 export const searchWiki = async (keyword) => {
   const rawQ = keyword.trim()

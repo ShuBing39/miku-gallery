@@ -1,55 +1,58 @@
 <template>
-    <div class="nav-grid">
-      <div class="nav-card wiki-card" @click="$router.push('/wiki')">
-        <div class="icon">📚</div>
-        <h3>葱葱维基</h3>
-        <p>查周边、看年份</p>
-      </div>
-      
-      <div class="nav-card kb-card" @click="$router.push('/encyclopedia')">
-        <div class="icon">📖</div>
-        <h3>葱葱百科</h3>
-        <p>知识科普、攻略</p>
-      </div>
+    <nav class="home-nav">
+      <div class="nav-content">
+        <div class="logo" @click="$router.push('/')">
+          ✨ Miku Gallery
+        </div>
   
-      <div class="nav-card event-card" @click="$router.push('/events')">
-        <div class="icon">📅</div>
-        <h3>活动情报</h3>
-        <p>魔法未来 / 线上 live</p>
-      </div>
+        <div class="nav-links">
+          <router-link to="/" active-class="active">首页</router-link>
+          <router-link to="/wiki" active-class="active">周边Wiki</router-link>
+          <router-link to="/encyclopedia" active-class="active">百科</router-link>
+          <router-link to="/projects" active-class="active">企划</router-link>
+          <router-link to="/events" active-class="active">活动</router-link>
+          <router-link to="/circle" active-class="active">社团</router-link>
+        </div>
   
-      <div class="nav-card ticket-card" @click="$router.push('/tickets')">
-        <div class="icon">🎫</div>
-        <h3>票务中心</h3>
-        <p>门票转让、交换</p>
+        <div class="nav-actions">
+          <button class="btn-create" @click="$router.push('/group-buy/new')">
+            📦 一键开团
+          </button>
+          
+          <div v-if="user" class="user-menu">
+            <span class="username" @click="$router.push('/dashboard')">
+              {{ user.user_metadata?.username || user.email }}
+            </span>
+          </div>
+          <div v-else class="auth-btns">
+            <router-link to="/login" class="btn-login">登录</router-link>
+            <router-link to="/register" class="btn-register">注册</router-link>
+          </div>
+        </div>
       </div>
-  
-      <div class="nav-card project-card" @click="$router.push('/projects')">
-        <div class="icon">🤝</div>
-        <h3>企划大厅</h3>
-        <p>加入创作、为爱发电</p>
-      </div>
-  
-      <div class="nav-card profile-card" @click="$router.push('/profile')">
-        <div class="icon">👤</div>
-        <h3>个人中心</h3>
-        <p>社团 / 历史管理</p>
-      </div>
-    </div>
+    </nav>
   </template>
   
-  <style scoped>
-  .nav-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; margin-bottom: 40px; }
-  .nav-card { background: white; border: 1px solid #eee; border-radius: 12px; padding: 20px; cursor: pointer; transition: transform 0.2s; text-align: center; }
-  .nav-card:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
-  .icon { font-size: 24px; margin-bottom: 8px; }
-  .nav-card h3 { margin: 0 0 5px 0; font-size: 14px; color: #333; }
-  .nav-card p { margin: 0; font-size: 11px; color: #888; }
+  <script setup>
+  import { computed } from 'vue'
+  import { useUserStore } from '../../stores/userStore'
   
-  .wiki-card { border-bottom: 3px solid #39c5bb; }
-  .kb-card { border-bottom: 3px solid #ffa000; } 
-  .ticket-card { border-bottom: 3px solid #00e676; }
-  .event-card { border-bottom: 3px solid #8b5cf6; } 
-  .project-card { border-bottom: 3px solid #f472b6; }
-  .profile-card { border-bottom: 3px solid #fbbf24; }
+  const userStore = useUserStore()
+  const user = computed(() => userStore.user)
+  </script>
+  
+  <style scoped>
+  .home-nav { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-bottom: 1px solid #eee; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.03); }
+  .nav-content { max-width: 1200px; margin: 0 auto; padding: 0 20px; height: 64px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-size: 20px; font-weight: 800; color: #39C5BB; cursor: pointer; letter-spacing: -0.5px; }
+  .nav-links { display: flex; gap: 30px; }
+  .nav-links a { text-decoration: none; color: #555; font-weight: 500; font-size: 15px; transition: 0.2s; position: relative; }
+  .nav-links a:hover, .nav-links a.active { color: #39C5BB; }
+  .nav-actions { display: flex; align-items: center; gap: 15px; }
+  .btn-create { background: #39C5BB; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: bold; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(57, 197, 187, 0.2); }
+  .btn-create:hover { background: #2da8a0; transform: translateY(-1px); }
+  .auth-btns { display: flex; gap: 10px; }
+  .btn-login { color: #666; text-decoration: none; font-size: 14px; }
+  .btn-register { background: #333; color: white; text-decoration: none; padding: 6px 14px; border-radius: 4px; font-size: 14px; }
+  .username { cursor: pointer; font-weight: bold; color: #333; }
   </style>
