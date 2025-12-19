@@ -30,15 +30,20 @@
         <input v-model="homeSearch" @keyup.enter="goToEncyclopedia" placeholder="💡 搜搜葱葱百科！(如: 应援棒、门票)" />
         <button @click="goToEncyclopedia">🔍 搜索百科</button>
       </div>
+      <div class="hero-actions">
+        <button class="btn-hero-action" @click="$router.push('/submit-project')">📢 发起企划</button>
+        <button class="btn-hero-action primary" @click="$router.push('/submit-group-buy')">📦 我要开团</button>
+      </div>
     </div>
 
     <div class="nav-grid">
       <div class="nav-card wiki-card" @click="$router.push('/wiki')"><div class="icon">📚</div><h3>葱葱维基</h3><p>查周边、看年份</p></div>
+      <div class="nav-card gb-card" @click="$router.push('/group-buy-lobby')"><div class="icon">🛍️</div><h3>拼团代购</h3><p>吃谷、拼团回血</p></div>
       <div class="nav-card kb-card" @click="$router.push('/encyclopedia')"><div class="icon">📖</div><h3>葱葱百科</h3><p>知识科普、攻略</p></div>
-      <div class="nav-card event-card" @click="$router.push('/events')"><div class="icon">📅</div><h3>活动情报</h3><p>魔法未来 / 线上 live</p></div>
+      <div class="nav-card event-card" @click="$router.push('/events')"><div class="icon">📅</div><h3>活动情报</h3><p>魔法未来 / Live</p></div>
       <div class="nav-card ticket-card" @click="$router.push('/tickets')"><div class="icon">🎫</div><h3>票务中心</h3><p>门票转让、交换</p></div>
-      <div class="nav-card project-card" @click="$router.push('/projects')"><div class="icon">🤝</div><h3>企划大厅</h3><p>加入创作、为爱发电</p></div>
-      <div class="nav-card profile-card" @click="$router.push('/profile')"><div class="icon">👤</div><h3>个人中心</h3><p>社团 / 历史管理</p></div>
+      <div class="nav-card project-card" @click="$router.push('/projects')"><div class="icon">🤝</div><h3>企划大厅</h3><p>加入创作</p></div>
+      <div class="nav-card profile-card" @click="$router.push('/profile')"><div class="icon">👤</div><h3>个人中心</h3><p>管理我的发布</p></div>
     </div>
 
     <div class="content-split">
@@ -71,7 +76,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '../services/supabase'
-import { formatDate, handleImgError, fixUrl } from '../utils/formatters' // 🟢 引入 fixUrl
+import { formatDate, handleImgError, fixUrl } from '../utils/formatters'
 
 const router = useRouter()
 const latestGoods = ref([])
@@ -112,10 +117,12 @@ const startCarousel = () => {
 }
 
 const fetchData = async () => {
+  // 获取周边
   const { data: rawItems } = await supabase.from('items').select('id, name, image_url, category, release_date, status').eq('status', 'approved').order('created_at', { ascending: false }).limit(30)
   if (rawItems) {
     latestGoods.value = rawItems.filter(i => !OFFICIAL_EVENT_CATEGORIES.includes(i.category) && i.category !== '同人企划' && i.category !== '企划').slice(0, 5)
   }
+  // 获取活动和企划混合列表
   const p1 = supabase.from('items').select('id, name, image_url, category, release_date, event_end_date').in('category', OFFICIAL_EVENT_CATEGORIES).eq('status', 'approved').order('created_at', { ascending: false }).limit(5)
   const p2 = supabase.from('projects').select('id, name, image_url, recruit_status, created_at').eq('allow_external', true).neq('recruit_status', 'ended').order('created_at', { ascending: false }).limit(5)
   const [res1, res2] = await Promise.all([p1, p2])
@@ -128,29 +135,42 @@ const fetchData = async () => {
 </script>
 
 <style scoped>
-/* 保持原有样式 */
 .home-container { max-width: 1200px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', sans-serif; color: #333; }
-.hero-search-section { margin-bottom: 30px; display: flex; justify-content: center; }
+
+/* 搜索与操作区 */
+.hero-search-section { margin-bottom: 30px; display: flex; flex-direction: column; align-items: center; gap: 15px; }
 .search-wrap { display: flex; width: 100%; max-width: 700px; box-shadow: 0 8px 25px rgba(57, 197, 187, 0.15); border-radius: 40px; background: white; padding: 5px; border: 2px solid #e0f2f1; transition: 0.3s; }
 .search-wrap:hover { box-shadow: 0 10px 30px rgba(57, 197, 187, 0.25); }
 .search-wrap input { flex: 1; border: none; outline: none; padding: 15px 25px; font-size: 16px; border-radius: 40px; background: transparent; }
 .search-wrap button { background: #39C5BB; color: white; border: none; padding: 0 35px; border-radius: 40px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; }
-.search-wrap button:hover { background: #2da8a0; }
-.nav-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 15px; margin-bottom: 40px; }
+.hero-actions { display: flex; gap: 15px; }
+.btn-hero-action { padding: 8px 20px; border-radius: 20px; border: 1px solid #ddd; background: white; cursor: pointer; font-weight: bold; color: #666; transition: 0.2s; }
+.btn-hero-action:hover { border-color: #39C5BB; color: #39C5BB; }
+.btn-hero-action.primary { background: #39C5BB; color: white; border: none; box-shadow: 0 4px 10px rgba(57, 197, 187, 0.3); }
+.btn-hero-action.primary:hover { background: #2da8a0; transform: translateY(-2px); }
+
+/* 导航网格 - 自适应布局 */
+.nav-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 15px; margin-bottom: 40px; }
 .nav-card { background: white; border: 1px solid #eee; border-radius: 12px; padding: 20px; cursor: pointer; transition: transform 0.2s; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .nav-card:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
-.icon { font-size: 24px; margin-bottom: 8px; }
-.nav-card h3 { margin: 0 0 5px 0; font-size: 14px; color: #333; font-weight: bold; }
-.nav-card p { margin: 0; font-size: 11px; color: #888; }
+.icon { font-size: 28px; margin-bottom: 8px; }
+.nav-card h3 { margin: 0 0 5px 0; font-size: 15px; color: #333; font-weight: bold; }
+.nav-card p { margin: 0; font-size: 12px; color: #888; }
+
+/* 卡片底部颜色条 */
 .wiki-card { border-bottom: 3px solid #39c5bb; }
 .kb-card { border-bottom: 3px solid #ffa000; } 
+.gb-card { border-bottom: 3px solid #ff5252; } /* 🔴 拼团色 */
 .ticket-card { border-bottom: 3px solid #00e676; }
 .event-card { border-bottom: 3px solid #8b5cf6; } 
 .project-card { border-bottom: 3px solid #f472b6; }
 .profile-card { border-bottom: 3px solid #fbbf24; }
+
+/* 内容分区布局 */
 .content-split { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
-@media (max-width: 1024px) { .nav-grid { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 768px) { .nav-grid { grid-template-columns: repeat(2, 1fr); } .content-split { grid-template-columns: 1fr; } }
+@media (max-width: 768px) { .content-split { grid-template-columns: 1fr; } }
+
+/* 轮播图 */
 .banner-wrapper { height: 200px; border-radius: 12px; overflow: hidden; position: relative; margin-bottom: 20px; background: #333; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
 .carousel-container { width: 100%; height: 100%; position: relative; }
 .banner-slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: center; opacity: 0; transition: opacity 0.5s ease; cursor: pointer; }
@@ -161,6 +181,8 @@ const fetchData = async () => {
 .indicators { position: absolute; bottom: 15px; right: 20px; display: flex; gap: 8px; z-index: 3; }
 .indicators span { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.5); cursor: pointer; transition: 0.3s; }
 .indicators span.active { background: white; transform: scale(1.2); }
+
+/* 列表通用 */
 .section-col { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); }
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
 .section-header h3 { margin: 0; font-size: 18px; color: #2c3e50; border-left: 4px solid #39C5BB; padding-left: 10px; }

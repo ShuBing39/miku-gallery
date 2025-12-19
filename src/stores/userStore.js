@@ -1,15 +1,32 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-// ✅ 指向您之前创建的 supabase 配置文件
-import { supabase } from '../supabase' 
+import { supabase } from '../services/supabase'
 
 export const useUserStore = defineStore('user', () => {
   const user = ref(null)
-  const profile = ref(null)
-  const session = ref(null)
-  const loading = ref(false)
+  const profile = ref(null) // 新增：单独存储用户资料(昵称头像)
 
-  // 获取用户详细资料
+  // 初始化：恢复登录状态
+  const initialize = async () => {
+    try {
+      // 1. 获取认证 Session
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (session?.user) {
+        user.value = session.user
+        // 2. 获取用户资料 (profiles 表)
+        await fetchProfile(user.value.id)
+      } else {
+        user.value = null
+        profile.value = null
+      }
+    } catch (e) {
+      console.error('用户初始化失败:', e)
+      user.value = null
+    }
+  }
+
+  // 获取 profile 表详情
   const fetchProfile = async (userId) => {
     try {
       const { data, error } = await supabase
@@ -18,72 +35,38 @@ export const useUserStore = defineStore('user', () => {
         .eq('id', userId)
         .single()
       
-      if (error && error.code !== 'PGRST116') {
-        console.error('获取个人资料失败:', error)
+      if (!error && data) {
+        profile.value = data
       }
-      if (data) profile.value = data
-    } catch (e) { 
-      console.error(e) 
-    }
-  }
-
-  // 初始化用户状态
-  async function initialize() {
-    loading.value = true
-    try {
-      const { data } = await supabase.auth.getSession()
-      session.value = data.session
-      user.value = data.session?.user || null
-      
-      if (user.value) {
-        await fetchProfile(user.value.id)
-      }
-
-      supabase.auth.onAuthStateChange(async (_event, _session) => {
-        session.value = _session
-        user.value = _session?.user || null
-        if (_session?.user) {
-            await fetchProfile(_session.user.id)
-        } else {
-            profile.value = null
-        }
-      })
     } catch (e) {
-      console.error('Store 初始化失败:', e)
-    } finally {
-      loading.value = false
+      console.error('获取资料失败:', e)
     }
   }
 
-  // 🔐 登录动作 - 显式定义函数
-  async function login(email, password) {
+  // 登录
+  const login = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
-
     if (data.user) {
-        user.value = data.user
-        session.value = data.session
-        await fetchProfile(data.user.id)
+      user.value = data.user
+      await fetchProfile(data.user.id)
     }
     return data
   }
 
-  // 退出登录
-  async function logout() {
+  // 退出
+  const logout = async () => {
     await supabase.auth.signOut()
     user.value = null
     profile.value = null
-    session.value = null
   }
 
-  // ✅ 确保这里把所有东西都交出去
-  return { 
-    user, 
-    profile, 
-    session, 
-    loading, 
-    initialize, 
-    login, 
-    logout 
+  return {
+    user,
+    profile,
+    initialize,
+    fetchProfile,
+    login,
+    logout
   }
 })

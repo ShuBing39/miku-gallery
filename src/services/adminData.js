@@ -42,7 +42,7 @@ export const getItems = async (page = 0, pageSize = 50, search = '') => {
   return data || []
 }
 
-// 新增：更新 Item (用于活动/周边信息的后台修改)
+// 更新 Item (用于活动/周边信息的后台修改)
 export const updateItem = async (id, updates) => {
   const { error } = await supabase.from('items').update(updates).eq('id', id)
   if (error) throw error
@@ -75,7 +75,7 @@ export const getEvents = async (search = '') => {
   return data || []
 }
 
-// --- 4. 票务/资质 ---
+// --- 4. 票务/资质 (旧版买家认证) ---
 export const getPendingVerifications = async () => {
   const { data } = await supabase.from('buyer_verifications').select('*').eq('status', 'pending').order('created_at')
   return data || []
@@ -86,7 +86,22 @@ export const getPendingTickets = async () => {
   return data || []
 }
 
-// --- 5. 通用操作 ---
+// --- ✅ [新增] 5. 用户实名认证 (新版团长认证) ---
+export const getPendingUserKYC = async () => {
+  const { data, error } = await supabase
+    .from('user_verifications')
+    .select('*')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true })
+  
+  if (error) {
+    console.error('获取实名列表失败:', error)
+    return []
+  }
+  return data || []
+}
+
+// --- 6. 通用操作 ---
 export const auditRecord = async (table, id, status) => {
   const { error } = await supabase.from(table).update({ status }).eq('id', id)
   if (error) throw error
@@ -97,7 +112,7 @@ export const deleteRecord = async (table, id) => {
   if (error) throw error
 }
 
-// --- 6. 邀请码 ---
+// --- 7. 邀请码 ---
 export const getInviteCodes = async () => {
   const { data, error } = await supabase.from('invite_codes').select('*').order('created_at', { ascending: false })
   if (error) return []
@@ -115,7 +130,7 @@ export const createInviteCode = async (maxUses = 1) => {
   if (error) throw error
 }
 
-// --- 7. 轮播图 & 百科种子 ---
+// --- 8. 轮播图 & 百科种子 ---
 export const getBanners = async () => {
   const { data } = await supabase.from('home_banners').select('*').order('sort_order', { ascending: false })
   return data || []

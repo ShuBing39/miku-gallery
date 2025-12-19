@@ -62,6 +62,43 @@
       </div>
     </div>
 
+    <div v-show="currentTab === 'kyc'" class="tab-content">
+      <div class="section-header">
+        <h3>🛡️ 待审核身份 ({{ pendingKycs.length }})</h3>
+        <button @click="loadKycData" class="refresh-btn">🔄 刷新</button>
+      </div>
+      <div class="kyc-list">
+        <div v-for="k in pendingKycs" :key="k.id" class="kyc-row">
+          <div class="k-info">
+            <div class="k-header">
+              <span class="k-name">{{ k.real_name }}</span>
+              <span class="k-age" :class="{minor: k.is_minor}">{{ k.is_minor ? '🔞 未成年' : '✅ 成年' }}</span>
+              <span class="k-id">{{ k.id_number }}</span>
+            </div>
+            <div class="k-imgs">
+              <div class="k-img-box" v-if="k.id_photos?.front">
+                <span>正面</span>
+                <img :src="k.id_photos.front" @click="openLightbox(k.id_photos.front)">
+              </div>
+              <div class="k-img-box" v-if="k.id_photos?.back">
+                <span>反面</span>
+                <img :src="k.id_photos.back" @click="openLightbox(k.id_photos.back)">
+              </div>
+              <div class="k-img-box" v-if="k.id_photos?.handheld">
+                <span>手持</span>
+                <img :src="k.id_photos.handheld" @click="openLightbox(k.id_photos.handheld)">
+              </div>
+            </div>
+          </div>
+          <div class="k-actions">
+            <button @click="processKYC(k, 'approved')" class="approve-btn large">通过认证</button>
+            <button @click="processKYC(k, 'rejected')" class="reject-btn large">驳回申请</button>
+          </div>
+        </div>
+        <div v-if="pendingKycs.length === 0" class="empty-mini">暂无待审核申请</div>
+      </div>
+    </div>
+
     <div v-show="currentTab === 'events'" class="tab-content">
       <div class="audit-section project-audit">
         <div class="section-header"><h3>📢 企划管理 ({{ pendingProjects.length }})</h3></div>
@@ -146,7 +183,7 @@
     </div>
 
     <div v-show="currentTab === 'tickets'" class="tab-content">
-      <p style="padding:20px; color:#666;">(票务审核暂未启用)</p>
+      <p style="padding:20px; color:#666;">(票务审核暂略)</p>
     </div>
     
     <div v-show="currentTab === 'banner'" class="tab-content">
@@ -219,6 +256,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/userStore'
 import { uploadImage } from '../services/storage'
 import * as api from '../services/adminData'
+// ✅ 关键修复：确保这里引入的名字和文件里导出的名字完全一致
+import { auditVerification } from '../services/authService'
 
 const router = useRouter()
 const route = useRoute()
@@ -226,6 +265,7 @@ const userStore = useUserStore()
 
 const tabs = [
   { key: 'audit', name: '📦 周边审核' },
+  { key: 'kyc', name: '🛡️ 实名审核' }, 
   { key: 'events', name: '📅 活动企划' },
   { key: 'invites', name: '🔑 邀请码' },
   { key: 'wiki_seed', name: '📖 百科补全' },
@@ -237,11 +277,12 @@ const currentTab = ref(route.query.tab || 'audit')
 const pendingItems = ref([])
 const items = ref([])
 const pendingProjects = ref([])
-const eventList = ref([]) // 官方活动列表
+const eventList = ref([]) 
 const seedCandidates = ref([])
 const inviteCodes = ref([])
 const banners = ref([])
 const pendingTickets = ref([])
+const pendingKycs = ref([]) 
 
 const showLightbox = ref(false)
 const lightboxImage = ref('')
@@ -269,6 +310,7 @@ const openLightbox = (url) => { lightboxImage.value = url; showLightbox.value = 
 
 const loadAllData = () => {
   if(currentTab.value === 'audit') loadAuditData()
+  if(currentTab.value === 'kyc') loadKycData() 
   if(currentTab.value === 'events') loadEventData()
   if(currentTab.value === 'invites') loadInviteData()
   if(currentTab.value === 'wiki_seed') loadWikiData()
@@ -276,40 +318,48 @@ const loadAllData = () => {
 }
 
 const loadAuditData = async () => { pendingItems.value = await api.getPendingItems(); items.value = await api.getItems() }
-const loadEventData = async () => { 
-  pendingProjects.value = await api.getPendingProjects() 
-  eventList.value = await api.getEvents() // 加载活动列表
-}
+const loadEventData = async () => { pendingProjects.value = await api.getPendingProjects(); eventList.value = await api.getEvents() }
 const loadInviteData = async () => { inviteCodes.value = await api.getInviteCodes() }
 const loadWikiData = async () => { seedCandidates.value = await api.getWikiSeeds() }
 const loadBannerData = async () => { banners.value = await api.getBanners() }
+const loadKycData = async () => { pendingKycs.value = await api.getPendingUserKYC() } 
 
 const handleAudit = async (table, id, status) => { if(confirm('确认操作?')) { await api.auditRecord(table, id, status); loadAllData() } }
 const handleDelete = async (table, id) => { if(confirm('确认删除? ⚠️此操作不可逆')) { await api.deleteRecord(table, id); loadAllData() } }
 const handleGenCode = async (count) => { await api.createInviteCode(count); loadInviteData() }
 
+// 处理实名审核逻辑
+const processKYC = async (kyc, status) => {
+  let reason = ''
+  if (status === 'rejected') {
+    reason = prompt('请输入驳回原因 (如: 照片模糊)')
+    if (!reason) return
+  }
+  
+  if (confirm(`确认${status === 'approved' ? '通过' : '驳回'} ${kyc.real_name} 的认证？`)) {
+    try {
+      await auditVerification(kyc.id, kyc.user_id, status, reason)
+      alert('操作成功')
+      loadKycData() // 刷新列表
+    } catch (e) {
+      alert('失败: ' + e.message)
+    }
+  }
+}
+
 // 企划编辑
 const openProjectEdit = (p) => { editProjectForm.value = { ...p }; showProjectEdit.value = true }
 const confirmProjectEdit = async () => {
   try {
-    await api.updateProjectInfo(editProjectForm.value.id, {
-      name: editProjectForm.value.name,
-      recruit_status: editProjectForm.value.recruit_status
-    })
+    await api.updateProjectInfo(editProjectForm.value.id, { name: editProjectForm.value.name, recruit_status: editProjectForm.value.recruit_status })
     alert('修改成功'); showProjectEdit.value = false; loadEventData()
   } catch(e) { alert('失败:'+e.message) }
 }
 
-// 活动/Item 编辑 (新增)
 const openItemEdit = (item) => { editItemForm.value = { ...item }; showItemEdit.value = true }
 const confirmItemEdit = async () => {
   try {
-    await api.updateItem(editItemForm.value.id, {
-      name: editItemForm.value.name,
-      release_date: editItemForm.value.release_date,
-      event_end_date: editItemForm.value.event_end_date,
-      description: editItemForm.value.description
-    })
+    await api.updateItem(editItemForm.value.id, { name: editItemForm.value.name, release_date: editItemForm.value.release_date, event_end_date: editItemForm.value.event_end_date, description: editItemForm.value.description })
     alert('修改成功'); showItemEdit.value = false; loadEventData()
   } catch(e) { alert('失败:'+e.message) }
 }
@@ -324,7 +374,7 @@ const submitBanner = async () => {
 </script>
 
 <style scoped>
-/* 保持所有原有样式，直接复用 */
+/* 原有样式保持不变 */
 .admin-container { padding: 20px; font-family: sans-serif; background: #f9f9f9; min-height: 100vh; }
 .admin-header { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
 .admin-tabs { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
@@ -344,6 +394,23 @@ const submitBanner = async () => {
 .approve-btn { background: #4caf50; color: white; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 5px; }
 .reject-btn { background: #f44336; color: white; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
 .edit-btn { background: #2196f3; color: white; padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 5px; }
+
+/* ✅ KYC 列表样式 */
+.kyc-list { display: flex; flex-direction: column; gap: 15px; }
+.kyc-row { background: white; padding: 20px; border-radius: 8px; border: 1px solid #eee; display: flex; justify-content: space-between; align-items: flex-start; }
+.k-info { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.k-header { display: flex; align-items: center; gap: 12px; }
+.k-name { font-weight: bold; font-size: 18px; color: #333; }
+.k-age { font-size: 12px; padding: 2px 8px; border-radius: 4px; background: #e8f5e9; color: #2e7d32; font-weight: bold; }
+.k-age.minor { background: #ffebee; color: #c62828; }
+.k-id { font-family: monospace; color: #666; letter-spacing: 1px; background: #f5f5f5; padding: 2px 6px; border-radius: 4px; }
+.k-imgs { display: flex; gap: 15px; margin-top: 5px; }
+.k-img-box { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 12px; color: #888; }
+.k-img-box img { width: 100px; height: 65px; object-fit: cover; border: 1px solid #ddd; border-radius: 6px; cursor: zoom-in; transition: 0.2s; }
+.k-img-box img:hover { transform: scale(1.05); border-color: #39C5BB; }
+.k-actions { display: flex; flex-direction: column; gap: 8px; min-width: 100px; }
+.approve-btn.large { padding: 10px 20px; font-size: 14px; width: 100%; }
+.reject-btn.large { padding: 10px 20px; font-size: 14px; width: 100%; }
 
 .invite-header-box { display: flex; justify-content: space-between; background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; align-items: center; }
 .btn-group { display: flex; gap: 10px; }
