@@ -22,14 +22,19 @@ import SubmitGroupBuy from '../views/SubmitGroupBuy.vue'
 import GroupBuyLobby from '../views/GroupBuyLobby.vue'
 import RealNameVerify from '../views/RealNameVerify.vue'
 import GroupBuyTool from '../views/GroupBuyTool.vue' 
-
-// ✅ 修正：从 components/group 目录引入
 import GroupBuyDetail from '../components/group/GroupBuyDetail.vue'
+
+// ✅ 1. 补上 WikiView 的引入
+import WikiView from '../views/WikiView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', name: 'home', component: HomeView },
+    
+    // ✅ 2. 补上 Wiki 的路由规则
+    { path: '/wiki', name: 'wiki', component: WikiView },
+
     { path: '/item/:id', name: 'item-detail', component: ItemDetail },
     { path: '/event/:id', name: 'event-detail', component: EventDetail },
     
@@ -37,7 +42,6 @@ const router = createRouter({
     { path: '/projects', name: 'projects', component: ProjectsView },
     { path: '/project/:id', name: 'project-detail', component: ProjectDetail },
     
-    // ✅ 注册拼团详情页路由
     { path: '/group-buy/:id', name: 'group-buy-detail', component: GroupBuyDetail },
 
     { path: '/encyclopedia', name: 'encyclopedia', component: EncyclopediaView },
