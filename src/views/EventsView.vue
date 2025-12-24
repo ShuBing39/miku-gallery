@@ -1,145 +1,243 @@
 <template>
   <div class="events-container">
-    <div class="page-header">
+    <div class="header-section">
       <h1>📅 官方活动情报</h1>
-      <p>魔法未来 / MIKU EXPO / 雪未来 / 联名活动</p>
+      <p>Official Event Information / 公式イベント情報</p>
       
-      <div class="filter-tabs">
-        <button 
-          v-for="cat in categories" 
-          :key="cat" 
-          :class="{ active: currentCategory === cat }"
-          @click="currentCategory = cat"
-        >
-          {{ cat }}
-        </button>
+      <div class="controls-wrapper">
+        <div class="filter-bar">
+          <button 
+            v-for="cat in categories" 
+            :key="cat.id"
+            class="filter-chip"
+            :class="{ active: currentCategory === cat.id }"
+            @click="currentCategory = cat.id"
+          >
+            {{ cat.name }}
+          </button>
+        </div>
+
+        <div class="toggle-row">
+          <label class="toggle-switch">
+            <input type="checkbox" v-model="hideEnded">
+            <span class="slider"></span>
+          </label>
+          <span class="toggle-label">隐藏已结束的活动</span>
+        </div>
       </div>
     </div>
 
     <div v-if="loading" class="loading-box">
       <div class="spinner"></div>
-      <p>正在读取情报...</p>
+      <p>Loading...</p>
     </div>
 
-    <div v-else-if="events.length > 0" class="events-list">
-      <div v-for="ev in events" :key="ev.id" class="event-card" @click="goDetail(ev)">
-        <div class="poster-wrapper">
-          <img :src="fixUrl(ev.image_url)" loading="lazy" />
-          <div class="status-overlay" :class="getStatus(ev).class">
-            {{ getStatus(ev).text }}
+    <div v-else class="events-grid">
+      <div 
+        v-for="event in filteredEvents" 
+        :key="event.id" 
+        class="event-card"
+        :class="{ 'ended-card': isEnded(event) }" 
+        @click="goToDetail(event.id)"
+      >
+        <div class="card-image">
+          <img 
+            :src="event.image_url || '/placeholder.png'" 
+            :alt="event.title" 
+            @error="handleImgError" 
+          />
+          
+          <div class="status-overlay">
+            <span class="status-tag" :class="getStatusClass(event)">{{ getStatusText(event) }}</span>
           </div>
         </div>
-        <div class="event-info">
-          <div class="date-badge-rect">
-            📅 {{ formatDateRange(ev) }}
+
+        <div class="card-content">
+          <h3 class="title" :title="event.title">
+            {{ event.title || 'No Title' }}
+          </h3>
+          
+          <div class="meta-row">
+            <span class="icon">📅</span>
+            <span class="date-text">
+              {{ formatDate(event.start_date) }} ~ {{ formatDate(event.end_date) }}
+            </span>
           </div>
-          <div class="info-main">
-            <span class="cat-tag">{{ ev.category }}</span>
-            <h3>{{ ev.name }}</h3>
-            <p class="loc">📍 {{ ev.author || '官方' }}</p>
+          
+          <div class="meta-row">
+            <span class="icon">📍</span>
+            <span class="location-text">OFFICIAL / JAPAN</span>
           </div>
-          <button class="btn-arrow">查看详情 ➔</button>
+
+          <p class="description">
+            {{ event.description || '...' }}
+          </p>
+
+          <div class="card-footer">
+             <button class="btn-detail">詳細を見る →</button>
+             <button v-if="isAdmin" class="btn-quick-edit" @click.stop="goToEdit(event.id)">
+               ⚙️
+             </button>
+          </div>
         </div>
       </div>
     </div>
 
-    <div v-else class="empty-state">
-      <p>📭 暂无此类活动情报</p>
+    <div v-if="!loading && filteredEvents.length === 0" class="empty-state">
+      <p>🍃 No Events Found...</p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { getEvents } from '../services/eventData'
-import { OFFICIAL_EVENT_CATEGORIES } from '../constants'
-import { fixUrl } from '../utils/formatters' // 🟢 引入 fixUrl
+import { useUserStore } from '../stores/userStore'
 
 const router = useRouter()
-const loading = ref(true)
+const userStore = useUserStore()
 const events = ref([])
-const currentCategory = ref('全部')
+const loading = ref(true)
+const currentCategory = ref('all')
+const hideEnded = ref(false) // 默认为 false，显示所有
 
-const categories = ['全部', ...OFFICIAL_EVENT_CATEGORIES]
+const categories = [
+  { id: 'all', name: 'ALL' },
+  { id: 'concert', name: 'MAGICAL MIRAI' },
+  { id: 'snow', name: 'SNOW MIKU' },
+  { id: 'expo', name: 'MIKU EXPO' },
+  { id: 'other', name: 'OTHERS' }
+]
 
-onMounted(() => {
-  loadEvents()
-})
+const isAdmin = computed(() => !!userStore.user)
 
-watch(currentCategory, () => {
-  loadEvents()
-})
-
-const loadEvents = async () => {
+onMounted(async () => {
   loading.value = true
-  try {
-    events.value = await getEvents(currentCategory.value)
-  } catch (e) {
-    console.error(e)
-  } finally {
-    loading.value = false
+  events.value = await getEvents()
+  loading.value = false
+})
+
+const isEnded = (ev) => {
+  if (!ev.end_date) return false
+  const now = new Date()
+  const end = new Date(ev.end_date)
+  end.setHours(23, 59, 59, 999)
+  return now > end
+}
+
+// ✅ 核心逻辑：双重过滤
+const filteredEvents = computed(() => {
+  let result = events.value
+
+  // 1. 先过滤分类
+  if (currentCategory.value !== 'all') {
+    result = result.filter(e => {
+      if (currentCategory.value === 'concert') return e.title.includes('マジカルミライ') || e.title.includes('魔法未来')
+      if (currentCategory.value === 'snow') return e.title.includes('雪ミク') || e.title.includes('Snow Miku')
+      if (currentCategory.value === 'expo') return e.title.includes('EXPO')
+      return true // other 暂不细分
+    })
   }
+
+  // 2. 再过滤是否隐藏已结束
+  if (hideEnded.value) {
+    result = result.filter(e => !isEnded(e))
+  }
+
+  return result
+})
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return 'TBD'
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return 'TBD'
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`
 }
 
-const goDetail = (ev) => {
-  router.push(`/event/${ev.id}`)
+const getStatusText = (ev) => {
+  if (isEnded(ev)) return '🏁 已结束'
+  if (ev.life_cycle_status === 'reserving') return '🔥 抢票中'
+  if (ev.life_cycle_status === 'active') return '🎉 进行中'
+  return '受付中' 
 }
 
-const getStatus = (ev) => {
-  const today = new Date().toISOString().split('T')[0]
-  if (ev.release_date && today < ev.release_date) return { text: '即将开始', class: 'upcoming' }
-  if (ev.event_end_date && today > ev.event_end_date) return { text: '已结束', class: 'ended' }
-  return { text: '进行中', class: 'active' }
+const getStatusClass = (ev) => {
+  if (isEnded(ev)) return 'status-gray'
+  if (ev.life_cycle_status === 'reserving') return 'status-red'
+  return 'status-green'
 }
 
-const formatDateRange = (ev) => {
-  const start = ev.release_date ? ev.release_date.split('T')[0].replace(/-/g, '/') : '待定'
-  const end = ev.event_end_date ? ev.event_end_date.split('T')[0].replace(/-/g, '/') : '待定'
-  return `${start} ~ ${end}`
+const handleImgError = (e) => {
+  e.target.src = '/placeholder.png'
+  e.target.onerror = null 
+}
+
+const goToDetail = (id) => {
+  router.push(`/event/${id}`)
+}
+
+const goToEdit = (id) => {
+  router.push(`/event/${id}`)
 }
 </script>
 
 <style scoped>
-.events-container { max-width: 1000px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', sans-serif; }
-.page-header { text-align: center; margin-bottom: 40px; padding: 40px 20px; background: linear-gradient(120deg, #e0c3fc 0%, #8ec5fc 100%); border-radius: 16px; color: white; box-shadow: 0 4px 15px rgba(142, 197, 252, 0.3); }
-.page-header h1 { margin: 0 0 10px; text-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-.filter-tabs { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 25px; }
-.filter-tabs button { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: white; padding: 6px 16px; border-radius: 20px; cursor: pointer; transition: 0.2s; font-size: 14px; backdrop-filter: blur(5px); }
-.filter-tabs button.active { background: white; color: #8ec5fc; font-weight: bold; transform: scale(1.05); }
-.filter-tabs button:hover:not(.active) { background: rgba(255,255,255,0.4); }
+.events-container { max-width: 1100px; margin: 0 auto; padding: 20px; min-height: 80vh; font-family: 'Segoe UI', sans-serif; }
 
-.loading-box { text-align: center; padding: 50px; color: #999; }
-.spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #8ec5fc; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 15px; }
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+.header-section { text-align: center; margin-bottom: 30px; padding: 30px 20px; background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); border-radius: 16px; color: #555; }
+.header-section h1 { margin: 0 0 5px 0; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.1); letter-spacing: 1px; }
+.header-section p { margin: 0 0 20px 0; color: #fff; opacity: 0.9; font-size: 0.9rem; }
 
-.events-list { display: grid; gap: 20px; }
-.event-card { background: white; border-radius: 12px; overflow: hidden; display: flex; box-shadow: 0 4px 15px rgba(0,0,0,0.05); transition: 0.2s; cursor: pointer; border: 1px solid #eee; }
-.event-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); border-color: #8ec5fc; }
+.controls-wrapper { display: flex; flex-direction: column; align-items: center; gap: 15px; }
 
-.poster-wrapper { width: 240px; position: relative; flex-shrink: 0; }
-.poster-wrapper img { width: 100%; height: 100%; object-fit: cover; }
-.status-overlay { position: absolute; top: 10px; left: 10px; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; }
-.status-overlay.active { background: #00b894; }
-.status-overlay.upcoming { background: #fdcb6e; color: #333; }
-.status-overlay.ended { background: #b2bec3; }
+.filter-bar { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.filter-chip { background: rgba(255,255,255,0.3); border: 1px solid rgba(255,255,255,0.5); padding: 5px 14px; border-radius: 20px; color: #fff; cursor: pointer; transition: 0.2s; backdrop-filter: blur(4px); font-size: 13px; font-weight: 500; }
+.filter-chip.active, .filter-chip:hover { background: white; color: #2196f3; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
 
-.event-info { flex: 1; padding: 20px; display: flex; flex-direction: column; justify-content: center; position: relative; }
-.date-badge-rect { font-weight: bold; color: #8ec5fc; font-size: 14px; margin-bottom: 8px; background: #f8f9fa; display: inline-block; padding: 4px 10px; border-radius: 6px; align-self: flex-start; }
+/* 🔥 开关样式 */
+.toggle-row { display: flex; align-items: center; gap: 8px; color: white; font-size: 14px; background: rgba(0,0,0,0.1); padding: 5px 15px; border-radius: 20px; }
+.toggle-switch { position: relative; display: inline-block; width: 36px; height: 20px; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255,255,255,0.4); transition: .4s; border-radius: 20px; }
+.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; }
+input:checked + .slider { background-color: #2196f3; }
+input:checked + .slider:before { transform: translateX(16px); }
 
-.info-main { flex: 1; }
-.cat-tag { font-size: 12px; color: #a29bfe; background: #f3f0ff; padding: 2px 8px; border-radius: 4px; }
-.info-main h3 { margin: 8px 0; font-size: 20px; color: #333; }
-.loc { margin: 0; color: #999; font-size: 14px; }
+.events-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 25px; }
 
-.btn-arrow { margin-top: 15px; align-self: flex-start; border: 1px solid #8ec5fc; color: #8ec5fc; background: white; padding: 6px 15px; border-radius: 20px; cursor: pointer; transition: 0.2s; font-size: 13px; }
-.event-card:hover .btn-arrow { background: #8ec5fc; color: white; }
+.event-card { background: white; border-radius: 10px; overflow: hidden; border: 1px solid #eee; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; display: flex; flex-direction: column; }
+.event-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.06); }
 
-.empty-state { text-align: center; padding: 60px; color: #aaa; }
+/* 灰色卡片样式 */
+.event-card.ended-card { filter: grayscale(100%); opacity: 0.7; }
+.event-card.ended-card:hover { filter: grayscale(0%); opacity: 1; }
 
-@media (max-width: 600px) {
-  .event-card { flex-direction: column; }
-  .poster-wrapper { width: 100%; height: 150px; }
-  .event-info { padding: 15px; }
-}
+.card-image { height: 180px; background: #f0f0f0; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.card-image img { width: 100%; height: 100%; object-fit: cover; transition: 0.3s; display: block; }
+.event-card:hover .card-image img { transform: scale(1.05); }
+.card-image img[src*="placeholder"] { object-fit: contain; padding: 40px; opacity: 0.4; }
+
+.status-overlay { position: absolute; top: 10px; left: 10px; }
+.status-tag { padding: 4px 10px; border-radius: 4px; color: white; font-size: 11px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+.status-green { background: #4caf50; }
+.status-red { background: #ff5252; }
+.status-gray { background: #757575; }
+
+.card-content { padding: 16px; flex: 1; display: flex; flex-direction: column; }
+.title { margin: 0 0 8px 0; font-size: 15px; color: #333; line-height: 1.5; font-weight: bold; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 45px; }
+
+.meta-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #999; margin-bottom: 4px; }
+.description { font-size: 12px; color: #777; margin: 12px 0 auto 0; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; opacity: 0.8; }
+
+.card-footer { margin-top: 15px; padding-top: 10px; border-top: 1px solid #f9f9f9; display: flex; justify-content: space-between; align-items: center; }
+.btn-detail { color: #2196f3; background: none; border: none; padding: 0; font-size: 12px; cursor: pointer; font-weight: 500; }
+.btn-detail:hover { text-decoration: underline; }
+
+.btn-quick-edit { background: none; border: none; font-size: 14px; cursor: pointer; color: #ddd; }
+.btn-quick-edit:hover { color: #333; }
+
+.loading-box, .empty-state { text-align: center; padding: 60px; color: #ccc; }
+.spinner { margin: 0 auto 10px; width: 30px; height: 30px; border: 3px solid #eee; border-top-color: #2196f3; border-radius: 50%; animation: spin 1s infinite linear; }
+@keyframes spin { 100% {transform: rotate(360deg);} }
 </style>

@@ -86,7 +86,7 @@ export const getPendingTickets = async () => {
   return data || []
 }
 
-// --- ✅ [新增] 5. 用户实名认证 (新版团长认证) ---
+// --- 5. 用户实名认证 (新版团长认证) ---
 export const getPendingUserKYC = async () => {
   const { data, error } = await supabase
     .from('user_verifications')
@@ -150,4 +150,74 @@ export const getWikiSeeds = async () => {
   query = applyCategoryFilters(query)
   const { data } = await query
   return data || []
+}
+
+// --- 9. 用户返图审核 ---
+export const getPendingUserImages = async () => {
+  const { data, error } = await supabase
+    .from('item_user_images')
+    .select(`
+      *,
+      items:item_id (name),
+      profiles:user_id (username)
+    `)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('获取返图失败:', error)
+    return []
+  }
+  return data || []
+}
+
+// --- ✅ [修复] 10. 百科纠错审核 ---
+
+// 获取所有待审核的修改建议
+export const getPendingWikiRevisions = async () => {
+  // ✅ 关键修改：在这里明确指定使用 'fk_wiki_item' 和 'fk_wiki_user' 这两个我们刚建的关联
+  // 语法是：别名:表名!外键名 (列名)
+  const { data, error } = await supabase
+    .from('wiki_revisions')
+    .select(`
+      *,
+      items:items!fk_wiki_item (name, image_url, description),
+      profiles:profiles!fk_wiki_user (username)
+    `)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+  
+  if (error) {
+    console.error('获取纠错列表失败:', error)
+    return []
+  }
+  return data || []
+}
+
+// 批准修改：这步会把新数据真正写入 items 表
+export const approveWikiRevision = async (revision) => {
+  // 1. 更新 items 表数据
+  const { error: updateError } = await supabase
+    .from('items')
+    .update(revision.new_data)
+    .eq('id', revision.item_id)
+  
+  if (updateError) throw updateError
+
+  // 2. 标记建议为已批准
+  const { error: statusError } = await supabase
+    .from('wiki_revisions')
+    .update({ status: 'approved' })
+    .eq('id', revision.id)
+
+  if (statusError) throw statusError
+}
+
+// 驳回修改
+export const rejectWikiRevision = async (id) => {
+  const { error } = await supabase
+    .from('wiki_revisions')
+    .update({ status: 'rejected' })
+    .eq('id', id)
+  if (error) throw error
 }

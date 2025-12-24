@@ -1,9 +1,10 @@
 import { supabase } from './supabase'
 
-// 1. 获取列表
+// 1. 获取列表 (从 wiki_articles 表取)
 export const getEncyclopediaEntries = async (search = '') => {
+  // 注意：这里改成了 wiki_articles
   let query = supabase
-    .from('encyclopedia_entries')
+    .from('wiki_articles')
     .select('*')
     .eq('is_published', true)
     .order('updated_at', { ascending: false })
@@ -21,7 +22,7 @@ export const getEncyclopediaEntries = async (search = '') => {
 // 2. 获取详情
 export const getEntryDetail = async (id) => {
   const { data, error } = await supabase
-    .from('encyclopedia_entries')
+    .from('wiki_articles')
     .select('*')
     .eq('id', id)
     .single()
@@ -30,27 +31,25 @@ export const getEntryDetail = async (id) => {
   return data
 }
 
-// 3. 【核心修复】保存/发布词条
+// 3. 保存/发布词条
 export const saveEntry = async (entryData) => {
-  // 确保数据符合数据库结构
   const payload = {
     title: entryData.title,
     content: entryData.content,
     category: entryData.category,
-    tags: entryData.tags || [], // 确保是数组
+    tags: entryData.tags || [],
     image_url: entryData.image_url,
     author_id: entryData.author_id,
     is_published: true,
     updated_at: new Date()
   }
 
-  // 如果有ID则是更新，没有则是新增
   if (entryData.id) {
     payload.id = entryData.id
   }
 
   const { data, error } = await supabase
-    .from('encyclopedia_entries')
+    .from('wiki_articles') // 统一用 wiki_articles
     .upsert(payload)
     .select()
   

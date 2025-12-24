@@ -62,6 +62,91 @@
       </div>
     </div>
 
+    <div v-show="currentTab === 'gallery'" class="tab-content">
+      <div class="audit-section">
+        <div class="section-header">
+          <h3>📸 待审核返图 ({{ pendingGallery.length }})</h3>
+          <button @click="loadGalleryData" class="refresh-btn">🔄 刷新</button>
+        </div>
+        
+        <div class="audit-grid">
+          <div v-for="img in pendingGallery" :key="img.id" class="audit-card" style="height: auto; flex-direction: column;">
+            <div class="img-box-wrapper" style="width: 100%; height: 200px;">
+              <img :src="img.image_url" class="audit-img" @click="openLightbox(img.image_url)">
+            </div>
+            
+            <div class="audit-info" style="padding: 10px 0;">
+              <div style="font-size: 12px; color: #666; margin-bottom: 5px;">
+                关联: <a :href="`/items/${img.item_id}`" target="_blank" style="color: #39C5BB; font-weight: bold;">{{ img.items?.name || '未知词条' }} 🔗</a><br>
+                用户: {{ img.profiles?.username || '未知' }}
+              </div>
+              <div v-if="img.caption" style="background:#f5f5f5; padding:5px; border-radius:4px; font-size:13px; margin-bottom:10px;">
+                "{{ img.caption }}"
+              </div>
+              
+              <div class="audit-actions">
+                <button @click="handleAudit('item_user_images', img.id, 'approved')" class="approve-btn" style="flex:1">✅ 通过</button>
+                <button @click="handleAudit('item_user_images', img.id, 'rejected')" class="reject-btn" style="flex:1">❌ 驳回</button>
+              </div>
+            </div>
+          </div>
+          
+          <div v-if="pendingGallery.length === 0" class="empty-mini">暂无待审返图</div>
+        </div>
+      </div>
+    </div>
+
+    <div v-show="currentTab === 'revisions'" class="tab-content">
+      <div class="section-header">
+        <h3>🔧 纠错提交 ({{ pendingRevisions.length }})</h3>
+        <button @click="loadRevisionsData" class="refresh-btn">🔄 刷新</button>
+      </div>
+      <div class="revisions-list">
+        <div v-for="rev in pendingRevisions" :key="rev.id" class="revision-card">
+          <div class="rev-header">
+            <div class="rev-meta">
+              <span class="rev-id">#{{ rev.id }}</span>
+              <span>提交人: <strong>{{ rev.profiles?.username || '未知用户' }}</strong></span>
+              <span>关联词条: 
+                <a :href="`/items/${rev.item_id}`" target="_blank" class="link-item">
+                  {{ rev.items?.name || rev.item_id }} 🔗
+                </a>
+              </span>
+            </div>
+            <div class="rev-actions">
+              <button @click="handleApproveRevision(rev)" class="approve-btn">✅ 批准并应用</button>
+              <button @click="handleRejectRevision(rev)" class="reject-btn">❌ 忽略</button>
+            </div>
+          </div>
+
+          <div class="rev-body">
+            <div class="rev-comment">
+              <strong>💬 用户备注:</strong> {{ rev.comment || '（无）' }}
+            </div>
+            
+            <div class="rev-diff-table">
+              <div v-for="change in getDiff(rev)" :key="change.key" class="diff-row">
+                <div class="diff-label">{{ change.label }}</div>
+                <div class="diff-old">
+                  <span class="badge old">修改前</span>
+                  {{ change.oldVal }}
+                </div>
+                <div class="diff-arrow">➡</div>
+                <div class="diff-new">
+                  <span class="badge new">修改后</span>
+                  {{ change.newVal }}
+                </div>
+              </div>
+              <div v-if="getDiff(rev).length === 0" class="no-change-hint">
+                ⚠️ 检测不到实质性修改 (可能是重复提交)
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-if="pendingRevisions.length === 0" class="empty-mini">暂无待审纠错</div>
+      </div>
+    </div>
+
     <div v-show="currentTab === 'kyc'" class="tab-content">
       <div class="section-header">
         <h3>🛡️ 待审核身份 ({{ pendingKycs.length }})</h3>
@@ -256,7 +341,6 @@ import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/userStore'
 import { uploadImage } from '../services/storage'
 import * as api from '../services/adminData'
-// ✅ 关键修复：确保这里引入的名字和文件里导出的名字完全一致
 import { auditVerification } from '../services/authService'
 
 const router = useRouter()
@@ -265,6 +349,8 @@ const userStore = useUserStore()
 
 const tabs = [
   { key: 'audit', name: '📦 周边审核' },
+  { key: 'gallery', name: '📸 返图审核' }, 
+  { key: 'revisions', name: '🔧 纠错' }, 
   { key: 'kyc', name: '🛡️ 实名审核' }, 
   { key: 'events', name: '📅 活动企划' },
   { key: 'invites', name: '🔑 邀请码' },
@@ -281,8 +367,9 @@ const eventList = ref([])
 const seedCandidates = ref([])
 const inviteCodes = ref([])
 const banners = ref([])
-const pendingTickets = ref([])
 const pendingKycs = ref([]) 
+const pendingGallery = ref([])
+const pendingRevisions = ref([]) 
 
 const showLightbox = ref(false)
 const lightboxImage = ref('')
@@ -310,6 +397,8 @@ const openLightbox = (url) => { lightboxImage.value = url; showLightbox.value = 
 
 const loadAllData = () => {
   if(currentTab.value === 'audit') loadAuditData()
+  if(currentTab.value === 'gallery') loadGalleryData()
+  if(currentTab.value === 'revisions') loadRevisionsData() 
   if(currentTab.value === 'kyc') loadKycData() 
   if(currentTab.value === 'events') loadEventData()
   if(currentTab.value === 'invites') loadInviteData()
@@ -317,7 +406,70 @@ const loadAllData = () => {
   if(currentTab.value === 'banner') loadBannerData()
 }
 
+const loadRevisionsData = async () => {
+  pendingRevisions.value = await api.getPendingWikiRevisions()
+}
+
+// ✅ 核心：对比新旧数据，生成差异列表
+const getDiff = (rev) => {
+  const oldItem = rev.items || {}
+  const newItem = rev.new_data || {}
+  const changes = []
+  
+  // 字段翻译字典
+  const labels = {
+    localized_title: '中文标题',
+    localized_description: '详情介绍',
+    start_date: '开始日期',
+    end_date: '结束日期',
+    reservation_start: '预约开始',
+    reservation_end: '预约结束',
+    group_buy_link: '拼团链接',
+    tags: '标签',
+    has_goods: '是否有周边'
+  }
+
+  for (const key in newItem) {
+    // 如果值一样，就跳过不显示
+    if (newItem[key] == oldItem[key]) continue 
+    // 如果是数组（如tags），进行深度比较
+    if (Array.isArray(newItem[key]) && JSON.stringify(newItem[key]) === JSON.stringify(oldItem[key])) continue
+    // 如果是布尔值且未定义，视为false
+    if (typeof newItem[key] === 'boolean' && oldItem[key] === undefined && newItem[key] === false) continue
+
+    changes.push({
+      key: key,
+      label: labels[key] || key,
+      oldVal: oldItem[key] === undefined || oldItem[key] === null ? '(空)' : oldItem[key],
+      newVal: newItem[key] === undefined || newItem[key] === null ? '(空)' : newItem[key]
+    })
+  }
+  return changes
+}
+
+const handleApproveRevision = async (rev) => {
+  if (!confirm('确认批准并应用这条修改吗？这将直接更新线上词条数据。')) return
+  try {
+    await api.approveWikiRevision(rev)
+    alert('✅ 批准成功！词条已更新。')
+    loadRevisionsData()
+  } catch (e) {
+    alert('❌ 批准失败: ' + e.message)
+  }
+}
+
+const handleRejectRevision = async (rev) => {
+  if (!confirm('确认驳回此条建议吗？')) return
+  try {
+    await api.rejectWikiRevision(rev.id)
+    loadRevisionsData()
+  } catch (e) {
+    alert('❌ 操作失败: ' + e.message)
+  }
+}
+
 const loadAuditData = async () => { pendingItems.value = await api.getPendingItems(); items.value = await api.getItems() }
+const loadGalleryData = async () => { pendingGallery.value = await api.getPendingUserImages() }
 const loadEventData = async () => { pendingProjects.value = await api.getPendingProjects(); eventList.value = await api.getEvents() }
 const loadInviteData = async () => { inviteCodes.value = await api.getInviteCodes() }
 const loadWikiData = async () => { seedCandidates.value = await api.getWikiSeeds() }
@@ -340,7 +492,7 @@ const processKYC = async (kyc, status) => {
     try {
       await auditVerification(kyc.id, kyc.user_id, status, reason)
       alert('操作成功')
-      loadKycData() // 刷新列表
+      loadKycData() 
     } catch (e) {
       alert('失败: ' + e.message)
     }
@@ -395,7 +547,7 @@ const submitBanner = async () => {
 .reject-btn { background: #f44336; color: white; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
 .edit-btn { background: #2196f3; color: white; padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 5px; }
 
-/* ✅ KYC 列表样式 */
+/* KYC 列表样式 */
 .kyc-list { display: flex; flex-direction: column; gap: 15px; }
 .kyc-row { background: white; padding: 20px; border-radius: 8px; border: 1px solid #eee; display: flex; justify-content: space-between; align-items: flex-start; }
 .k-info { display: flex; flex-direction: column; gap: 10px; flex: 1; }
@@ -447,4 +599,25 @@ const submitBanner = async () => {
 .lightbox-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 3000; display: flex; justify-content: center; align-items: center; }
 .lightbox-img { max-height: 90vh; max-width: 90vw; }
 .del-btn { color: red; border: 1px solid #ffcdd2; background: white; padding: 2px 8px; border-radius: 4px; cursor: pointer; }
+
+/* ✅ 新增：纠错对比样式 */
+.revisions-list { display: flex; flex-direction: column; gap: 15px; }
+.revision-card { background: white; border-radius: 8px; border: 1px solid #eee; overflow: hidden; }
+.rev-header { background: #f9f9f9; padding: 10px 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+.rev-meta { display: flex; gap: 15px; font-size: 13px; color: #666; align-items: center; }
+.rev-id { background: #673ab7; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+.link-item { color: #39C5BB; font-weight: bold; text-decoration: none; }
+.rev-body { padding: 15px; }
+.rev-comment { background: #e3f2fd; padding: 8px; border-radius: 4px; font-size: 13px; color: #0d47a1; margin-bottom: 15px; border-left: 3px solid #2196f3; }
+.rev-diff-table { border: 1px solid #eee; border-radius: 6px; overflow: hidden; }
+.diff-row { display: flex; align-items: center; border-bottom: 1px solid #eee; font-size: 13px; padding: 8px; }
+.diff-row:last-child { border-bottom: none; }
+.diff-label { width: 100px; font-weight: bold; color: #555; }
+.diff-old { flex: 1; color: #999; text-decoration: line-through; padding: 0 10px; display: flex; align-items: center; gap: 5px; }
+.diff-new { flex: 1; color: #2e7d32; font-weight: bold; padding: 0 10px; display: flex; align-items: center; gap: 5px; }
+.diff-arrow { color: #ccc; margin: 0 5px; }
+.badge { font-size: 10px; padding: 1px 4px; border-radius: 3px; }
+.badge.old { background: #eee; color: #666; }
+.badge.new { background: #e8f5e9; color: #2e7d32; }
+.no-change-hint { text-align: center; padding: 10px; color: #999; font-style: italic; }
 </style>

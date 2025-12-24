@@ -1,5 +1,5 @@
-// src/services/wikiData.js
 import { supabase } from './supabase'
+// 奶奶，这里保留引用您原来的常量
 import { OFFICIAL_EVENT_CATEGORIES } from '../constants'
 
 // 定义要排除的分类 (活动和企划不属于周边Wiki)
@@ -9,7 +9,7 @@ const EXCLUDE_CATS = [
   '企划'
 ]
 
-// 按月份获取数据
+// ✅ 1. 保留原有功能：按月份获取数据
 export const fetchWikiByMonth = async (year, month) => {
   const startStr = `${year}-${month}-01`
   // 计算下个月1号
@@ -28,28 +28,26 @@ export const fetchWikiByMonth = async (year, month) => {
   return data || []
 }
 
-// ... (保留原有 import 和函数)
-
-// 检查是否已关注
+// ✅ 2. 保留原有功能：检查是否已关注
 export const checkSubscription = async (wikiId, userId) => {
-    const { data } = await supabase.from('wiki_subscriptions')
-      .select('id').match({ wiki_id: wikiId, user_id: userId }).single()
-    return !!data
-  }
-  
-  // 切换关注状态
-  export const toggleSubscription = async (wikiId, userId) => {
-    const isSubbed = await checkSubscription(wikiId, userId)
-    if (isSubbed) {
-      await supabase.from('wiki_subscriptions').delete().match({ wiki_id: wikiId, user_id: userId })
-      return false
-    } else {
-      await supabase.from('wiki_subscriptions').insert({ wiki_id: wikiId, user_id: userId })
-      return true
-    }
-  }
+  const { data } = await supabase.from('wiki_subscriptions')
+    .select('id').match({ wiki_id: wikiId, user_id: userId }).single()
+  return !!data
+}
 
-// 搜索数据
+// ✅ 3. 保留原有功能：切换关注状态
+export const toggleSubscription = async (wikiId, userId) => {
+  const isSubbed = await checkSubscription(wikiId, userId)
+  if (isSubbed) {
+    await supabase.from('wiki_subscriptions').delete().match({ wiki_id: wikiId, user_id: userId })
+    return false
+  } else {
+    await supabase.from('wiki_subscriptions').insert({ wiki_id: wikiId, user_id: userId })
+    return true
+  }
+}
+
+// ✅ 4. 保留原有功能：搜索数据
 export const searchWiki = async (keyword) => {
   const rawQ = keyword.trim()
   if (!rawQ) return []
@@ -95,4 +93,42 @@ export const searchWiki = async (keyword) => {
   const { data, error } = await query
   if (error) throw error
   return data || []
+}
+
+// ✅ 5. 获取单个词条详情 (用于编辑页面)
+export const getWikiById = async (id) => {
+  const { data, error } = await supabase
+    .from('items')
+    .select('*')
+    .eq('id', id)
+    .single()
+    
+  if (error) {
+    console.error('获取词条详情失败:', error)
+    return null
+  }
+  return data
+}
+
+// ✅ 6. 提交词条修改建议 (核心功能)
+export const submitWikiRevision = async (revisionData) => {
+  const { data, error } = await supabase
+    .from('wiki_revisions')
+    .insert([revisionData])
+    .select()
+    
+  if (error) throw error
+  return data
+}
+
+// ✅ 7. (可选) 获取用户的提交记录
+export const getUserRevisions = async (userId) => {
+  const { data, error } = await supabase
+    .from('wiki_revisions')
+    .select('*, items(name)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+
+  if (error) return []
+  return data
 }

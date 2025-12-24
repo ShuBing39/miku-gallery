@@ -55,12 +55,13 @@
 
     <div class="tabs">
       <button :class="{ active: currentTab === 'projects' }" @click="currentTab = 'projects'">我的企划</button>
-      <button :class="{ active: currentTab === 'wiki' }" @click="currentTab = 'wiki'">我的投稿</button>
+      <button :class="{ active: currentTab === 'contributions' }" @click="currentTab = 'contributions'">我的投稿</button>
       <button :class="{ active: currentTab === 'tasks' }" @click="currentTab = 'tasks'">我的任务</button>
       <button :class="{ active: currentTab === 'collect' }" @click="currentTab = 'collect'">我的收藏</button>
     </div>
 
     <div class="tab-content">
+      
       <div v-if="currentTab === 'projects'" class="tab-pane">
         <div class="pane-actions">
           <button class="btn-small" @click="$router.push('/submit-project')">+ 发起新企划</button>
@@ -77,17 +78,51 @@
         </div>
       </div>
 
-      <div v-if="currentTab === 'wiki'" class="tab-pane">
-        <div class="pane-actions">
-          <button class="btn-small" @click="$router.push('/submit')">+ 投稿周边</button>
+      <div v-if="currentTab === 'contributions'" class="tab-pane">
+        <div class="sub-tabs">
+          <button :class="{ active: contribSubTab === 'images' }" @click="contribSubTab = 'images'">📸 我的返图 ({{ myImages.length }})</button>
+          <button :class="{ active: contribSubTab === 'wiki' }" @click="contribSubTab = 'wiki'">📝 纠错记录 ({{ myRevisions.length }})</button>
         </div>
-        <div v-if="myWikiItems.length === 0" class="empty-state">还没有投稿过周边条目</div>
-        <div v-else class="simple-list">
-          <div v-for="item in myWikiItems" :key="item.id" class="list-row" @click="$router.push(`/item/${item.id}`)">
-            <img :src="item.image_url" class="tiny-thumb">
-            <span class="row-title">{{ item.name }}</span>
-            <span class="row-status" :class="item.status">{{ item.status === 'approved' ? '已发布' : '审核中' }}</span>
-          </div>
+
+        <div v-if="contribSubTab === 'images'" class="sub-view">
+           <div class="pane-actions">
+             <button class="btn-small" @click="$router.push('/events')">+ 去周边页发图</button>
+           </div>
+           <div v-if="myImages.length === 0" class="empty-state">还没有上传过买家秀哦 ~</div>
+           <div v-else class="list-grid">
+             <div v-for="img in myImages" :key="img.id" class="mini-card gallery-card">
+               <div class="img-wrapper">
+                 <img :src="img.image_url" class="mini-cover">
+                 <div class="status-badge-corner" :class="img.status">
+                   {{ getStatusLabel(img.status) }}
+                 </div>
+               </div>
+               <div class="card-text">
+                 <span class="name">关联: {{ img.items?.name || '未知周边' }}</span>
+                 <p v-if="img.caption" class="caption-text">"{{ img.caption }}"</p>
+                 <span class="date-text">{{ formatDate(img.created_at) }}</span>
+               </div>
+             </div>
+           </div>
+        </div>
+
+        <div v-if="contribSubTab === 'wiki'" class="sub-view">
+           <div v-if="myRevisions.length === 0" class="empty-state">还没有提交过词条纠错建议 ~</div>
+           <div v-else class="simple-list">
+             <div v-for="rev in myRevisions" :key="rev.id" class="list-row revision-row">
+               <div class="row-left">
+                 <span class="status-dot" :class="rev.status"></span>
+                 <div class="row-content">
+                   <span class="row-title">修改: {{ rev.items?.name }}</span>
+                   <p class="row-desc">备注: {{ rev.comment || '无' }}</p>
+                 </div>
+               </div>
+               <div class="row-right">
+                 <span class="status-text" :class="rev.status">{{ getStatusLabel(rev.status) }}</span>
+                 <span class="date-text">{{ formatDate(rev.created_at) }}</span>
+               </div>
+             </div>
+           </div>
         </div>
       </div>
 
@@ -128,20 +163,25 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/userStore'
 import { supabase } from '../services/supabase'
 import { uploadImage } from '../services/storage'
-import { getIdentityStatus } from '../services/authService' // ✅ 引入认证检查
+import { getIdentityStatus } from '../services/authService'
+// ✅ 引入新服务
+import { getMyImages, getMyWikiRevisions } from '../services/userData'
 
 const router = useRouter()
 const userStore = useUserStore()
 
+// 状态
 const currentTab = ref('projects')
+const contribSubTab = ref('images') // ✅ 贡献页面的子Tab
 const showEditModal = ref(false)
 const fileInput = ref(null)
 const editForm = reactive({ username: '' })
 
 // 数据容器
 const myProjects = ref([])
-const myWikiItems = ref([])
 const myTasks = ref([])
+const myImages = ref([])      // ✅ 新增
+const myRevisions = ref([])   // ✅ 新增
 
 // 认证状态
 const verifyStatus = ref('none')
@@ -156,21 +196,19 @@ onMounted(async () => {
   if (!userStore.user) await userStore.initialize()
   if (!userStore.user) return router.replace('/login')
 
-  // 初始化编辑表单
   if (userStore.profile) {
     editForm.username = userStore.profile.username
   }
 
-  // 并行加载数据
+  // 加载所有数据
   await Promise.all([
     fetchVerifyStatus(),
     fetchMyProjects(),
-    fetchMyWiki(),
-    fetchMyTasks()
+    fetchMyTasks(),
+    fetchContributions() // ✅ 加载新数据
   ])
 })
 
-// --- 认证逻辑 ---
 const fetchVerifyStatus = async () => {
   const data = await getIdentityStatus(userStore.user.id)
   if (data) {
@@ -179,22 +217,9 @@ const fetchVerifyStatus = async () => {
   }
 }
 
-// --- 数据获取 ---
 const fetchMyProjects = async () => {
-  // 获取我发起的 + 我参与的(暂略参与，只显示发起)
   const { data } = await supabase.from('projects').select('*').eq('uploader_id', userStore.user.id)
   if (data) myProjects.value = data
-}
-
-const fetchMyWiki = async () => {
-  // 假设 items 表有 author 字段或 user_id 字段
-  // 如果之前没有记录 creator，这里可能查不到，这里尝试用 author 查
-  // 建议 items 表增加 user_id 字段
-  // 这里暂时演示查询逻辑
-  const { data } = await supabase.from('items').select('*').eq('status', 'pending') // 简化逻辑：查待审核的
-  // 实际应该查 user_id 等于当前用户的
-  // const { data } = await supabase.from('items').select('*').eq('user_id', userStore.user.id)
-  if (data) myWikiItems.value = data
 }
 
 const fetchMyTasks = async () => {
@@ -202,16 +227,37 @@ const fetchMyTasks = async () => {
   if (data) myTasks.value = data
 }
 
-// --- 交互逻辑 ---
-const triggerAvatarUpload = () => fileInput.value.click()
+// ✅ 获取贡献数据 (返图 + 纠错)
+const fetchContributions = async () => {
+  const userId = userStore.user.id
+  const [imgs, revs] = await Promise.all([
+    getMyImages(userId),
+    getMyWikiRevisions(userId)
+  ])
+  myImages.value = imgs
+  myRevisions.value = revs
+}
 
+// 辅助函数
+const getStatusLabel = (status) => {
+  if (status === 'approved') return '已通过'
+  if (status === 'rejected') return '已驳回'
+  return '审核中'
+}
+const formatDate = (dateStr) => {
+  const d = new Date(dateStr)
+  return `${d.getMonth()+1}/${d.getDate()}`
+}
+
+// --- 交互逻辑 (保留原样) ---
+const triggerAvatarUpload = () => fileInput.value.click()
 const handleAvatarUpload = async (e) => {
   const file = e.target.files[0]
   if (!file) return
   try {
     const url = await uploadImage('user_uploads', 'avatars', file)
     await supabase.from('profiles').update({ avatar_url: url }).eq('id', userStore.user.id)
-    await userStore.initialize() // 刷新状态
+    await userStore.initialize() 
     alert('头像更新成功')
   } catch (e) {
     alert('上传失败: ' + e.message)
@@ -237,23 +283,20 @@ const handleLogout = async () => {
 </script>
 
 <style scoped>
+/* 继承原有的样式 */
 .dashboard-container { max-width: 900px; margin: 0 auto; padding: 40px 20px; font-family: 'Segoe UI', sans-serif; min-height: 80vh; }
 .floating-nav { position: fixed; bottom: 30px; left: 20px; display: flex; flex-direction: column; gap: 10px; }
 .floating-nav button { width: 40px; height: 40px; border-radius: 50%; border: none; background: white; box-shadow: 0 4px 10px rgba(0,0,0,0.1); cursor: pointer; font-size: 20px; }
 
-/* 头部信息卡 */
 .profile-header { background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); display: flex; gap: 30px; align-items: center; margin-bottom: 30px; }
-
 .avatar-wrapper { position: relative; width: 90px; height: 90px; border-radius: 50%; overflow: hidden; cursor: pointer; border: 4px solid #e0f2f1; }
 .user-avatar { width: 100%; height: 100%; object-fit: cover; }
 .avatar-overlay { position: absolute; bottom: 0; width: 100%; background: rgba(0,0,0,0.6); color: white; font-size: 10px; text-align: center; padding: 3px 0; opacity: 0; transition: 0.2s; }
 .avatar-wrapper:hover .avatar-overlay { opacity: 1; }
-
 .info { flex: 1; }
 .username { margin: 0 0 5px 0; font-size: 24px; display: flex; align-items: center; gap: 10px; color: #333; }
 .role-tag { font-size: 12px; background: #673ab7; color: white; padding: 2px 8px; border-radius: 4px; vertical-align: middle; }
 .email { margin: 0; color: #888; font-size: 14px; }
-
 .badges { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .badge { background: #e0f2f1; color: #00695c; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
 .badge.verified { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
@@ -264,8 +307,6 @@ const handleLogout = async () => {
 .actions { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
 .btn-row { display: flex; gap: 10px; }
 .btn-verify { background: #39C5BB; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%; box-shadow: 0 4px 10px rgba(57,197,187,0.2); animation: pulse 2s infinite; }
-@keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
-
 .btn-admin { background: #673ab7; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; }
 .btn-circle { background: #ff9800; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; }
 .btn-edit, .btn-logout { background: white; border: 1px solid #ddd; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; color: #666; }
@@ -275,6 +316,11 @@ const handleLogout = async () => {
 .tabs { display: flex; gap: 20px; border-bottom: 1px solid #eee; margin-bottom: 20px; }
 .tabs button { background: none; border: none; padding: 10px 0; font-size: 16px; color: #666; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.2s; }
 .tabs button.active { color: #39C5BB; border-bottom-color: #39C5BB; font-weight: bold; }
+
+/* ✅ 子标签页 (我的投稿) */
+.sub-tabs { display: flex; gap: 10px; margin-bottom: 15px; }
+.sub-tabs button { background: #f5f5f5; border: none; padding: 5px 12px; border-radius: 20px; font-size: 13px; color: #666; cursor: pointer; }
+.sub-tabs button.active { background: #39C5BB; color: white; font-weight: bold; }
 
 .pane-actions { text-align: right; margin-bottom: 15px; }
 .btn-small { background: #e0f2f1; color: #00695c; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; }
@@ -291,10 +337,32 @@ const handleLogout = async () => {
 .simple-list { display: flex; flex-direction: column; gap: 10px; }
 .list-row { display: flex; align-items: center; background: white; padding: 10px; border-radius: 8px; border: 1px solid #eee; cursor: pointer; transition: 0.2s; }
 .list-row:hover { border-color: #39C5BB; }
-.tiny-thumb { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; margin-right: 15px; }
 .row-title { flex: 1; font-weight: 500; font-size: 14px; }
 .row-status { font-size: 12px; padding: 2px 6px; border-radius: 4px; background: #eee; color: #666; }
-.row-status.approved { background: #e8f5e9; color: #2e7d32; }
+
+/* ✅ 返图卡片特殊样式 */
+.gallery-card .img-wrapper { position: relative; height: 140px; }
+.gallery-card .mini-cover { height: 100%; }
+.status-badge-corner { position: absolute; top: 5px; right: 5px; font-size: 10px; padding: 2px 6px; border-radius: 4px; color: white; font-weight: bold; }
+.status-badge-corner.approved { background: #4caf50; }
+.status-badge-corner.rejected { background: #f44336; }
+.status-badge-corner.pending { background: #ff9800; }
+.caption-text { font-size: 12px; color: #666; background: #f5f5f5; padding: 4px; margin: 5px 0 0 0; border-radius: 4px; }
+.date-text { font-size: 11px; color: #ccc; margin-top: 5px; display: block; text-align: right; }
+
+/* ✅ 纠错行特殊样式 */
+.revision-row { justify-content: space-between; align-items: flex-start; }
+.row-left { display: flex; gap: 10px; flex: 1; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+.status-dot.approved { background: #4caf50; }
+.status-dot.rejected { background: #f44336; }
+.status-dot.pending { background: #ff9800; }
+.row-desc { font-size: 12px; color: #888; margin: 2px 0 0 0; }
+.row-right { text-align: right; display: flex; flex-direction: column; gap: 2px; }
+.status-text { font-size: 12px; font-weight: bold; }
+.status-text.approved { color: #4caf50; }
+.status-text.pending { color: #ff9800; }
+.status-text.rejected { color: #f44336; }
 
 .empty-state { text-align: center; padding: 40px; color: #aaa; font-style: italic; background: #f9f9f9; border-radius: 8px; }
 
