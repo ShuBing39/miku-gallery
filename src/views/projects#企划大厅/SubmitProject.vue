@@ -101,10 +101,10 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useUserStore } from '../stores/userStore'
-import { supabase } from '../services/supabase'
-import { uploadImage } from '../services/storage'
-import { submitProject } from '../services/submitData'
+import { useUserStore } from '../../stores/userStore'
+import { supabase } from '../../services/supabase'
+import { uploadImage } from '../../services/storage'
+import { submitProject } from '../../services/submitData'
 
 const router = useRouter()
 const route = useRoute()

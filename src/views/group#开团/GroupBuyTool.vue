@@ -93,7 +93,7 @@
   import { ref, onMounted, computed, reactive } from 'vue'
   import { useRoute } from 'vue-router'
   import * as XLSX from 'xlsx'
-  import { getProjectOrders, batchImportOrders, deleteOrder } from '../services/orderService'
+  import { getProjectOrders, batchImportOrders, deleteOrder } from '../../services/orderService'
   
   const route = useRoute()
   const projectId = route.query.id

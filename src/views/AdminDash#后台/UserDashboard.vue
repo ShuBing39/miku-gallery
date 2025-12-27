@@ -160,12 +160,12 @@
 <script setup>
 import { ref, onMounted, computed, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { useUserStore } from '../stores/userStore'
-import { supabase } from '../services/supabase'
-import { uploadImage } from '../services/storage'
-import { getIdentityStatus } from '../services/authService'
+import { useUserStore } from '../../stores/userStore'
+import { supabase } from '../../services/supabase'
+import { uploadImage } from '../../services/storage'
+import { getIdentityStatus } from '../../services/authService'
 // ✅ 引入新服务
-import { getMyImages, getMyWikiRevisions } from '../services/userData'
+import { getMyImages, getMyWikiRevisions } from '../../services/userData'
 
 const router = useRouter()
 const userStore = useUserStore()

@@ -216,7 +216,7 @@
 
 <script setup>
 import { ref, onMounted, computed, nextTick } from 'vue'
-import { supabase } from '../services/supabase'
+import { supabase } from '../../services/supabase'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()

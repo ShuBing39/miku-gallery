@@ -60,8 +60,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getProjectsList, getPromotedProjects, incrementView } from '../services/projectData'
-import { formatDate } from '../utils/formatters'
+import { getProjectsList, getPromotedProjects, incrementView } from '../../services/projectData'
+import { formatDate } from '../../utils/formatters'
 
 const router = useRouter()
 const projects = ref([])

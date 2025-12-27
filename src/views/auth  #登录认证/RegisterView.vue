@@ -2,7 +2,7 @@
   import { ref } from 'vue'
   import { useRouter } from 'vue-router'
   // ✅ 修正引用路径：指向 services/supabase
-  import { supabase } from '../services/supabase' 
+  import { supabase } from '../../services/supabase' 
   
   const router = useRouter()
   

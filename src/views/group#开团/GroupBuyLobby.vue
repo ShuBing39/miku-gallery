@@ -60,7 +60,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { supabase } from '../services/supabase'
+import { supabase } from '../../services/supabase'
 
 const router = useRouter()
 const list = ref([])

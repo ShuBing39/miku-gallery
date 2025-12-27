@@ -29,8 +29,8 @@
 <script setup>
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useUserStore } from '../stores/userStore'
-import { getIdentityStatus } from '../services/authService'
+import { useUserStore } from '../../stores/userStore'
+import { getIdentityStatus } from '../../services/authService'
 
 // 引入分步组件 (稍后创建)
 import Step1_Selection from '../components/group/Step1_Selection.vue'

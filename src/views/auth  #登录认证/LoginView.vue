@@ -18,7 +18,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useUserStore } from '../stores/userStore' // 使用 Store
+import { useUserStore } from '../../stores/userStore' // 使用 Store
 
 const router = useRouter()
 const route = useRoute()

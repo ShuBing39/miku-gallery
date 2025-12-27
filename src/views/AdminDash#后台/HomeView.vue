@@ -75,8 +75,8 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { supabase } from '../services/supabase'
-import { formatDate, handleImgError, fixUrl } from '../utils/formatters'
+import { supabase } from '../../services/supabase'
+import { formatDate, handleImgError, fixUrl } from '../../utils/formatters'
 
 const router = useRouter()
 const latestGoods = ref([])

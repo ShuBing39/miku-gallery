@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 import { OFFICIAL_EVENT_CATEGORIES } from '../constants'
 
-// 辅助函数：在数据库层面排除活动和企划
+// 辅助函数
 const applyCategoryFilters = (query) => {
   if (OFFICIAL_EVENT_CATEGORIES && OFFICIAL_EVENT_CATEGORIES.length > 0) {
     query = query.not('category', 'in', `(${OFFICIAL_EVENT_CATEGORIES.map(c => `"${c}"`).join(',')})`)
@@ -10,7 +10,7 @@ const applyCategoryFilters = (query) => {
   return query
 }
 
-// --- 1. 周边审核 ---
+// --- 1. 周边审核 (Items) ---
 export const getPendingItems = async () => {
   let query = supabase.from('items')
     .select('*')
@@ -42,13 +42,12 @@ export const getItems = async (page = 0, pageSize = 50, search = '') => {
   return data || []
 }
 
-// 更新 Item (用于活动/周边信息的后台修改)
 export const updateItem = async (id, updates) => {
   const { error } = await supabase.from('items').update(updates).eq('id', id)
   if (error) throw error
 }
 
-// --- 2. 企划管理 ---
+// --- 2. 同人企划管理 (Projects) ---
 export const getPendingProjects = async () => {
   const { data, error } = await supabase.from('projects')
     .select('*')
@@ -62,20 +61,40 @@ export const updateProjectInfo = async (id, updates) => {
   if (error) throw error
 }
 
-// --- 3. 活动列表 ---
-export const getEvents = async (search = '') => {
-  let query = supabase.from('items')
+// --- ✅ [修改] 3. 官方活动管理 (Events 表) ---
+// 这里的 getEvents 改为读取真正的 'events' 表，不再读取 'items'
+export const getOfficialEvents = async () => {
+  const { data, error } = await supabase
+    .from('events') // ✅ 读取 events 表
     .select('*')
-    .in('category', OFFICIAL_EVENT_CATEGORIES)
-    .order('release_date', { ascending: false })
-    .limit(50)
+    .order('start_date', { ascending: false }) // 按开始时间倒序
   
-  if (search) query = query.ilike('name', `%${search}%`)
-  const { data } = await query
+  if (error) {
+    console.error('获取官方活动列表失败:', error)
+    return []
+  }
   return data || []
 }
 
-// --- 4. 票务/资质 (旧版买家认证) ---
+// ✅ 新增：创建官方活动
+export const createOfficialEvent = async (eventData) => {
+  const { error } = await supabase.from('events').insert(eventData)
+  if (error) throw error
+}
+
+// ✅ 新增：更新官方活动
+export const updateOfficialEvent = async (id, updates) => {
+  const { error } = await supabase.from('events').update(updates).eq('id', id)
+  if (error) throw error
+}
+
+// ✅ 新增：删除官方活动
+export const deleteOfficialEvent = async (id) => {
+  const { error } = await supabase.from('events').delete().eq('id', id)
+  if (error) throw error
+}
+
+// --- 4. 票务/资质 ---
 export const getPendingVerifications = async () => {
   const { data } = await supabase.from('buyer_verifications').select('*').eq('status', 'pending').order('created_at')
   return data || []
@@ -86,7 +105,7 @@ export const getPendingTickets = async () => {
   return data || []
 }
 
-// --- 5. 用户实名认证 (新版团长认证) ---
+// --- 5. 用户实名认证 ---
 export const getPendingUserKYC = async () => {
   const { data, error } = await supabase
     .from('user_verifications')
@@ -171,18 +190,14 @@ export const getPendingUserImages = async () => {
   return data || []
 }
 
-// --- ✅ [修复] 10. 百科纠错审核 ---
-
-// 获取所有待审核的修改建议
+// --- 10. 百科纠错审核 ---
 export const getPendingWikiRevisions = async () => {
-  // ✅ 关键修改：在这里明确指定使用 'fk_wiki_item' 和 'fk_wiki_user' 这两个我们刚建的关联
-  // 语法是：别名:表名!外键名 (列名)
   const { data, error } = await supabase
     .from('wiki_revisions')
     .select(`
       *,
-      items:items!fk_wiki_item (name, image_url, description),
-      profiles:profiles!fk_wiki_user (username)
+      items:item_id (name, image_url, description),
+      profiles:user_id (username)
     `)
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
@@ -194,26 +209,20 @@ export const getPendingWikiRevisions = async () => {
   return data || []
 }
 
-// 批准修改：这步会把新数据真正写入 items 表
 export const approveWikiRevision = async (revision) => {
-  // 1. 更新 items 表数据
   const { error: updateError } = await supabase
     .from('items')
     .update(revision.new_data)
     .eq('id', revision.item_id)
-  
   if (updateError) throw updateError
 
-  // 2. 标记建议为已批准
   const { error: statusError } = await supabase
     .from('wiki_revisions')
     .update({ status: 'approved' })
     .eq('id', revision.id)
-
   if (statusError) throw statusError
 }
 
-// 驳回修改
 export const rejectWikiRevision = async (id) => {
   const { error } = await supabase
     .from('wiki_revisions')
