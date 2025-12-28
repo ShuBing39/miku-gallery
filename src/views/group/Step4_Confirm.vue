@@ -83,7 +83,7 @@ try {
     const payload = {
     name: props.data.title || '未命名团购',
     description: '拼团数据', // 简短描述，具体数据存 JSON
-    uploader_id: userStore.user.id,
+    user_id: userStore.user.id,
     recruit_status: 'recruiting',
     allow_external: props.data.mode === 'online',
     image_url: props.data.items[0]?.image_url, 

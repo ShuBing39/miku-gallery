@@ -42,7 +42,8 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getEncyclopediaEntries } from '../services/encyclopediaData' // ✅ 使用新服务
+// ✅ 修正路径：../../
+import { getEncyclopediaEntries } from '../../services/encyclopediaData'
 
 const route = useRoute()
 const router = useRouter()

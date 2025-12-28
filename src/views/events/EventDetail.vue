@@ -232,10 +232,11 @@
 <script setup>
 import { ref, onMounted, computed, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getEventById, updateEvent } from '../services/eventData'
-import { useUserStore } from '../stores/userStore'
-import { supabase } from '../services/supabase' 
-import { uploadImage } from '../services/storage'
+// ✅ 修正路径引用：全部改为 ../../
+import { getEventById, updateEvent } from '../../services/eventData'
+import { useUserStore } from '../../stores/userStore'
+import { supabase } from '../../services/supabase' 
+import { uploadImage } from '../../services/storage'
 
 const route = useRoute()
 const router = useRouter()
@@ -307,7 +308,7 @@ const loadData = async () => {
 // ✅ 新增：加载返图相册
 const loadGallery = async () => {
   const { data, error } = await supabase
-    .from('item_user_images')
+    .from('user_images')
     .select('*')
     .eq('item_id', event.value.id)
     .eq('status', 'approved') // 只显示审核通过的
@@ -400,7 +401,7 @@ const submitReturnImage = async () => {
     const path = `item-images/user_uploads/${Date.now()}_${Math.random().toString(36).substring(7)}`
     const url = await uploadImage('item-images', path, uploadFile.value) 
     
-    const { error } = await supabase.from('item_user_images').insert({
+    const { error } = await supabase.from('user_images').insert({
       item_id: event.value.id,
       user_id: userStore.user.id,
       image_url: url,

@@ -100,10 +100,11 @@
 <script setup>
 import { ref, onMounted, computed, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useUserStore } from '../stores/userStore'
-import { uploadImage } from '../services/storage'
-import { supabase } from '../services/supabase'
-import { saveEntry, getEntryDetail } from '../services/encyclopediaData'
+// ✅ 修正路径：../../
+import { useUserStore } from '../../stores/userStore'
+import { uploadImage } from '../../services/storage'
+import { supabase } from '../../services/supabase'
+import { saveEntry, getEntryDetail } from '../../services/encyclopediaData'
 
 const router = useRouter()
 const route = useRoute()
@@ -123,7 +124,7 @@ let debounceTimer = null
 
 const tagInput = ref('')
 const form = reactive({
-  id: null, // 编辑模式下会有 ID
+  id: null, 
   title: '',
   category: '科普',
   content: '',
@@ -134,7 +135,6 @@ const form = reactive({
 const isEditMode = computed(() => !!route.query.id)
 
 onMounted(async () => {
-  // 检查登录
   if (!userStore.user) {
     await userStore.initialize()
     if (!userStore.user) {
@@ -144,15 +144,12 @@ onMounted(async () => {
     }
   }
 
-  // 初始化数据
   if (route.query.id) {
     await loadExistingEntry(route.query.id)
   } else if (route.query.import_id) {
     await loadItemAsTemplate(route.query.import_id)
   }
 })
-
-// --- 逻辑处理 ---
 
 const loadExistingEntry = async (id) => {
   try {
@@ -170,7 +167,6 @@ const loadExistingEntry = async (id) => {
   }
 }
 
-// 标签操作
 const addTag = () => {
   const val = tagInput.value.trim()
   if (val && !form.tags.includes(val)) {
@@ -183,7 +179,6 @@ const handleBackspace = () => {
   if (tagInput.value === '' && form.tags.length > 0) form.tags.pop()
 }
 
-// 图片操作
 const handleFile = (e) => {
   const file = e.target.files[0]
   if (file) {
@@ -198,16 +193,14 @@ const clearImage = () => {
   if (fileInput.value) fileInput.value.value = ''
 }
 
-// 提交发布
 const handleSubmit = async () => {
   if (!form.title || !form.content) return alert('标题和内容必填')
-  if (tagInput.value.trim()) addTag() // 提交前把输入框里的tag加进去
+  if (tagInput.value.trim()) addTag() 
   
   uploading.value = true
 
   try {
     let finalUrl = form.image_url
-    // 如果有新文件，先上传
     if (fileToUpload.value) {
       finalUrl = await uploadImage('user_uploads', 'wiki', fileToUpload.value)
     }
@@ -215,7 +208,7 @@ const handleSubmit = async () => {
     const payload = {
       ...form,
       image_url: finalUrl,
-      author_id: userStore.user.id
+      user_id: userStore.user.id
     }
 
     await saveEntry(payload)
@@ -230,7 +223,6 @@ const handleSubmit = async () => {
   }
 }
 
-// --- 导入功能 ---
 const searchItems = () => {
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(async () => {
@@ -275,7 +267,6 @@ ${item.name} 是官方推出的周边产品...`
 h2 { margin: 0; color: #333; font-size: 24px; }
 .import-btn { background: #e3f2fd; color: #1565c0; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; }
 
-/* Tag Input Styles */
 .tag-input-wrapper { border: 2px solid #e0f2f1; padding: 5px; border-radius: 8px; background: white; min-height: 45px; display: flex; flex-wrap: wrap; align-items: center; }
 .tag-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 5px; width: 100%; }
 .smart-tag { background: #39C5BB; color: white; padding: 4px 10px; border-radius: 15px; font-size: 13px; display: flex; align-items: center; gap: 5px; }
@@ -292,7 +283,6 @@ h2 { margin: 0; color: #333; font-size: 24px; }
 .cat-chip { padding: 8px 18px; background: #f5f5f5; border-radius: 20px; cursor: pointer; font-size: 14px; color: #666; transition: 0.2s; border: 1px solid transparent; font-weight: 500; }
 .cat-chip.active { background: #39C5BB; color: white; box-shadow: 0 4px 10px rgba(57, 197, 187, 0.3); }
 
-/* 图片上传 */
 .upload-area { margin-top: 5px; }
 .upload-placeholder { width: 100%; height: 120px; border: 2px dashed #ddd; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #999; background: #fafafa; }
 .upload-placeholder:hover { border-color: #39C5BB; color: #39C5BB; background: #f0fcfb; }
@@ -305,7 +295,6 @@ h2 { margin: 0; color: #333; font-size: 24px; }
 .save-btn:hover { background: #26a69a; transform: translateY(-2px); }
 .save-btn:disabled { opacity: 0.6; cursor: wait; }
 
-/* 弹窗 */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 3000; }
 .modal-content { background: white; padding: 25px; border-radius: 12px; width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
 .import-list { margin-top: 15px; max-height: 300px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; }

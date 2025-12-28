@@ -145,11 +145,12 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useUserStore } from '../stores/userStore' 
-import { fetchWikiByMonth, searchWiki } from '../services/wikiData' 
-import WikiCard from '../components/wiki/WikiCard.vue' 
-// ✅ 引入 supabase 用于获取同人数据
-import { supabase } from '../services/supabase'
+
+// ✅ [修复] 路径全部改为 ../../ 开头，因为本文件在 views/archive/ 下
+import { useUserStore } from '../../stores/userStore' 
+import { fetchWikiByMonth, searchWiki } from '../../services/wikiData' 
+import WikiCard from '../../components/wiki/WikiCard.vue' 
+import { supabase } from '../../services/supabase'
 
 const userStore = useUserStore()
 const searchInput = ref('')

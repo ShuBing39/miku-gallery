@@ -140,11 +140,9 @@
 
 <script setup>
 import { ref, onMounted, reactive } from 'vue'
-// import { createClient } from '@supabase/supabase-js' // REMOVED
-import { supabase } from '../services/supabase' // ADDED: Use shared instance
+import { supabase } from '../../services/supabase' 
 import { useRouter } from 'vue-router'
 
-// const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY) // REMOVED
 const router = useRouter()
 
 const currentUser = ref(null)
@@ -190,7 +188,8 @@ onMounted(async () => {
 // --- 核心逻辑 ---
 
 const checkVerification = async () => {
-  // UPDATED: Changed .single() to .maybeSingle() to avoid 406 error when no row exists
+  // 使用 maybeSingle 避免 406 错误
+  // 注意：买家认证表通常使用 user_id，保持不变
   const { data } = await supabase.from('buyer_verifications').select('status').eq('user_id', currentUser.value.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
   if (data) verificationStatus.value = data.status
 }
@@ -204,7 +203,8 @@ const fetchTickets = async () => {
 }
 
 const fetchMyTickets = async () => {
-  const { data } = await supabase.from('tickets').select('*').eq('seller_id', currentUser.value.id)
+  // ✅ [统一修改] 以前是 seller_id，现在统一改为 user_id
+  const { data } = await supabase.from('tickets').select('*').eq('user_id', currentUser.value.id)
   myTickets.value = data || []
 }
 
@@ -221,9 +221,11 @@ const handleProofUpload = async (e) => {
   const file = e.target.files[0]
   if (!file) return
   uploading.value = true
-  // 上传逻辑 (省略错误处理)
   const fileName = `tickets/${Date.now()}_${file.name}`
-  await supabase.storage.from('user_uploads').upload(fileName, file)
+  const { error: uploadError } = await supabase.storage.from('user_uploads').upload(fileName, file)
+  if (uploadError) {
+      alert('图片上传失败'); uploading.value = false; return
+  }
   const { data } = supabase.storage.from('user_uploads').getPublicUrl(fileName)
   sellForm.proof_url = data.publicUrl
   uploading.value = false
@@ -235,7 +237,8 @@ const submitTicket = async () => {
   const code = generateTicketCode(sellForm.concert_date, sellForm.code_tail)
   
   const { error } = await supabase.from('tickets').insert({
-    seller_id: currentUser.value.id,
+    // ✅ [统一修改] 以前是 seller_id，现在统一改为 user_id
+    user_id: currentUser.value.id,
     event_name: sellForm.event_name,
     concert_date: sellForm.concert_date,
     seat_type: sellForm.seat_type,
@@ -284,13 +287,15 @@ const handleBuy = async (ticket) => {
   if (verificationStatus.value !== 'approved') return alert('请先完成买家资质认证！')
   if (confirm(`确认预约这张门票吗？\nID: ${ticket.ticket_code}\n\n预约后请按照卖家要求进行面交。爽约将被封号。`)) {
     // 写入预约表
+    // 注意：这里的 buyer_id 是指买家，和发布的 user_id (卖家) 不同
+    // 为了避免混淆，建议保留为 buyer_id，或者根据你的数据库定义修改
+    // 如果数据库 ticket_orders 表也统一成了 user_id，请在这里修改为 user_id
     const { error } = await supabase.from('ticket_orders').insert({
       ticket_id: ticket.id,
-      buyer_id: currentUser.value.id
+      buyer_id: currentUser.value.id 
     })
     
     if (!error) {
-      // 更新门票状态
       await supabase.from('tickets').update({ status: 'reserved' }).eq('id', ticket.id)
       alert('预约成功！请联系卖家进行面交。')
       fetchTickets()

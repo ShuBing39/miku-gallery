@@ -1,8 +1,7 @@
 import { supabase } from './supabase'
 
-// 1. 获取列表 (从 wiki_articles 表取)
+// 1. 获取列表
 export const getEncyclopediaEntries = async (search = '') => {
-  // 注意：这里改成了 wiki_articles
   let query = supabase
     .from('wiki_articles')
     .select('*')
@@ -10,7 +9,6 @@ export const getEncyclopediaEntries = async (search = '') => {
     .order('updated_at', { ascending: false })
 
   if (search) {
-    // 搜索标题、标签或分类
     query = query.or(`title.ilike.%${search}%,tags.cs.{${search}},category.ilike.%${search}%`)
   }
 
@@ -39,7 +37,8 @@ export const saveEntry = async (entryData) => {
     category: entryData.category,
     tags: entryData.tags || [],
     image_url: entryData.image_url,
-    author_id: entryData.author_id,
+    // ✅ [统一修改] 数据库字段已改为 user_id
+    user_id: entryData.user_id || entryData.author_id, 
     is_published: true,
     updated_at: new Date()
   }
@@ -49,7 +48,7 @@ export const saveEntry = async (entryData) => {
   }
 
   const { data, error } = await supabase
-    .from('wiki_articles') // 统一用 wiki_articles
+    .from('wiki_articles')
     .upsert(payload)
     .select()
   

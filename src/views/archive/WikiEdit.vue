@@ -63,9 +63,9 @@
   <script setup>
   import { ref, onMounted, reactive } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
-  import { getItemById } from '../services/itemData'
-  import { submitWikiRevision } from '../services/wikiData'
-  import { useUserStore } from '../stores/userStore'
+  import { getItemById } from '../../services/itemData'
+  import { submitWikiRevision } from '../../services/wikiData'
+  import { useUserStore } from '../../stores/userStore'
   
   const route = useRoute()
   const router = useRouter()

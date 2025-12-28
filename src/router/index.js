@@ -1,89 +1,125 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { supabase } from '../services/supabase' 
 
-// 引入组件
-import HomeView from '../views/AdminDash#后台/HomeView.vue'
-import ItemDetail from '../views/ItemDetail.vue'
-import EventDetail from '../views/EventDetail.vue'
-import LoginView from '../views/auth/LoginView.vue'
-import RegisterView from '../views/auth/RegisterView.vue'
-import AdminDashboard from '../views/AdminDash/AdminDashboard.vue'
-import UserDashboard from '../views/AdminDash#后台/UserDashboard.vue'
-import SubmitWork from '../views/archive #资料库/SubmitWork.vue'
-import ProjectsView from '../views/projects#企划大厅/ProjectsList.vue'
-import ProjectDetail from '../views/ProjectDetail.vue'
-import EventsView from '../views/EventsView.vue'
-import EncyclopediaView from '../views/EncyclopediaView.vue'
-import EncyclopediaEdit from '../views/EncyclopediaEdit.vue' // (保留旧引入，以防万一)
-import TicketCenter from '../views/TicketCenter.vue'
-import CircleCenter from '../views/circle/CircleCenter.vue'
-import SubmitProject from '../views/projects#企划大厅/SubmitProject.vue'
-import SubmitGroupBuy from '../views/group/SubmitGroupBuy.vue'
-import GroupBuyLobby from '../views/group/GroupBuyLobby.vue'
-import RealNameVerify from '../views/RealNameVerify.vue'
-import GroupBuyTool from '../views/group/GroupBuyTool.vue' 
-import GroupBuyDetail from '../components/group/GroupBuyDetail.vue'
-import WikiView from '../views/WikiView.vue'
+// ✅ 1. 引入组件 (路径已修正为纯英文，请确保文件夹名与之一致)
+// 假设你已将 "AdminDash#后台" 改为 "AdminDash"，以此类推
+import HomeView from '../views/AdminDash/HomeView.vue'
+import LoginView from '../views/Auth/LoginView.vue'
+import RegisterView from '../views/Auth/RegisterView.vue'
+import RealNameVerify from '../views/Auth/RealNameVerify.vue'
 
-// ✅ [新增] 引入刚才写的编辑页面
-import WikiEdit from '../views/WikiEdit.vue'
+import ItemDetail from '../views/Archive/ItemDetail.vue'
+import SubmitWork from '../views/Archive/SubmitWork.vue'
+
+import EventsView from '../views/Events/EventList.vue'
+import EventDetail from '../views/Events/EventDetail.vue'
+
+import AdminDashboard from '../views/AdminDash/AdminDashboard.vue'
+import UserDashboard from '../views/AdminDash/UserDashboard.vue'
+
+import ProjectsView from '../views/Projects/ProjectsList.vue'
+import ProjectDetail from '../views/Projects/ProjectDetail.vue'
+import SubmitProject from '../views/Projects/SubmitProject.vue'
+
+import EncyclopediaView from '../views/Encyclopedia/EncyclopediaList.vue'
+// 懒加载编辑页
+
+import TicketCenter from '../views/TicketCenter/TicketCenter.vue'
+import CircleCenter from '../views/Circle/CircleCenter.vue'
+
+import GroupBuyLobby from '../views/Group/GroupBuyLobby.vue'
+import GroupBuyDetail from '../views/Group/GroupBuyDetail.vue'
+import SubmitGroupBuy from '../views/Group/SubmitGroupBuy.vue'
+import GroupBuyTool from '../views/Group/GroupBuyTool.vue'
+
+// ✅ 2. 管理员邮箱白名单
+const ADMIN_EMAILS = [
+  '949058921@qq.com', // 替换为你的管理员邮箱
+  // 'admin2@example.com' 
+]
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    // --- 首页 & 基础 ---
     { path: '/', name: 'home', component: HomeView },
     
-    { path: '/wiki', name: 'wiki', component: WikiView },
+    // --- 认证相关 (Auth) ---
+    { path: '/login', name: 'login', component: LoginView },
+    { path: '/register', name: 'register', component: RegisterView },
+    { path: '/verify', name: 'verify', component: RealNameVerify, meta: { requiresAuth: true } },
+    { path: '/profile', name: 'profile', component: UserDashboard, meta: { requiresAuth: true } },
 
+    // --- 周边库 (Archive) ---
+    // ⚠️ 修复了 .vue.vue 双后缀错误
+    { path: '/items', name: 'items', component: () => import('../views/Archive/GoodsWikiView.vue') }, 
     { path: '/item/:id', name: 'item-detail', component: ItemDetail },
+    { path: '/submit', name: 'submit', component: SubmitWork, meta: { requiresAuth: true } },
+
+    // --- 活动 (Events) ---
+    { path: '/events', name: 'events', component: EventsView },
     { path: '/event/:id', name: 'event-detail', component: EventDetail },
     
-    { path: '/events', name: 'events', component: EventsView },
+    // --- 百科 (Encyclopedia) ---
+    { path: '/wiki', name: 'wiki', component: EncyclopediaView },
+    { path: '/wiki/new', name: 'wiki-new', component: () => import('../views/Encyclopedia/EncyclopediaEdit.vue') },
+    { path: '/wiki/:id/edit', name: 'wiki-edit', component: () => import('../views/Encyclopedia/EncyclopediaEdit.vue') },
+
+    // --- 票务 & 社团 (Ticket & Circle) ---
+    { path: '/tickets', name: 'tickets', component: TicketCenter },
+    { path: '/circles', name: 'circles', component: CircleCenter },
+    
+    // --- 企划 (Projects) ---
     { path: '/projects', name: 'projects', component: ProjectsView },
     { path: '/project/:id', name: 'project-detail', component: ProjectDetail },
-    
-    { path: '/group-buy/:id', name: 'group-buy-detail', component: GroupBuyDetail },
+    { path: '/submit-project', name: 'submit-project', component: SubmitProject, meta: { requiresAuth: true } },
 
-    { path: '/encyclopedia', name: 'encyclopedia', component: EncyclopediaView },
-    
-    // ✅ [修改] 让编辑链接指向我们的新页面 WikiEdit，并要求登录
-    { 
-      path: '/encyclopedia/edit', 
-      name: 'wiki-edit', 
-      component: WikiEdit,
-      meta: { requiresAuth: true }
-    },
-    
-    { path: '/tickets', name: 'tickets', component: TicketCenter },
-    { path: '/circle', name: 'circle', component: CircleCenter, meta: { requiresAuth: true } },
-    
-    { path: '/group-buy-lobby', name: 'group-buy-lobby', component: GroupBuyLobby },
+    // --- 团购 (Group) ---
+    { path: '/group-buys', name: 'group-buys', component: GroupBuyLobby },
+    { path: '/group-buy/:id', name: 'group-buy-detail', component: GroupBuyDetail }, 
     { path: '/submit-group-buy', name: 'submit-group-buy', component: SubmitGroupBuy, meta: { requiresAuth: true } },
     { path: '/group-buy-tool', name: 'group-buy-tool', component: GroupBuyTool, meta: { requiresAuth: true } },
 
-    { path: '/login', name: 'login', component: LoginView },
-    { path: '/register', name: 'register', component: RegisterView },
-    { path: '/profile', name: 'profile', component: UserDashboard, meta: { requiresAuth: true } },
-    { path: '/admin', name: 'admin', component: AdminDashboard, meta: { requiresAuth: true } },
-    { path: '/submit', name: 'submit', component: SubmitWork, meta: { requiresAuth: true } },
-    { path: '/submit-project', name: 'submit-project', component: SubmitProject, meta: { requiresAuth: true } },
-    
-    { path: '/verify', name: 'verify', component: RealNameVerify, meta: { requiresAuth: true } }
+    // --- 后台管理 (Admin) ---
+    { 
+      path: '/admin', 
+      name: 'admin', 
+      component: AdminDashboard, 
+      // ✅ 加上权限标记
+      meta: { requiresAuth: true, requiresAdmin: true } 
+    }
   ],
   scrollBehavior(to, from, savedPosition) {
     return savedPosition || { top: 0 }
   }
 })
 
+// ✅ 3. 路由守卫 (包含管理员检查)
 router.beforeEach(async (to, from, next) => {
-  // 简单的登录检查
-  if (to.meta.requiresAuth) {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) next('/login')
-    else next()
-  } else {
-    next()
+  const { data: { session }, error } = await supabase.auth.getSession()
+
+  // Token 异常处理
+  if (error) {
+    await supabase.auth.signOut()
+    return next('/login')
   }
+
+  const user = session?.user
+
+  // A. 检查是否需要登录
+  if (to.meta.requiresAuth && !user) {
+    return next('/login')
+  }
+
+  // B. 检查是否需要管理员权限
+  if (to.meta.requiresAdmin) {
+    if (!user || !ADMIN_EMAILS.includes(user.email)) {
+      alert('🚫 权限不足：只有管理员才能进入后台。')
+      return next('/') // 拒绝访问，跳回首页
+    }
+  }
+
+  next()
 })
 
 export default router

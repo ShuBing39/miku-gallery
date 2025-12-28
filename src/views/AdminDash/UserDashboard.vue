@@ -218,7 +218,7 @@ const fetchVerifyStatus = async () => {
 }
 
 const fetchMyProjects = async () => {
-  const { data } = await supabase.from('projects').select('*').eq('uploader_id', userStore.user.id)
+  const { data } = await supabase.from('projects').select('*').eq('user_id', userStore.user.id)
   if (data) myProjects.value = data
 }
 

@@ -134,9 +134,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useUserStore } from '../stores/userStore'
-// ✅ 恢复原来的引用，不使用那个报错的组件了
-import { getItemById, uploadUserImage } from '../services/itemData'
+// ✅ 修正路径引用：全部改为 ../../
+import { useUserStore } from '../../stores/userStore'
+import { getItemById, uploadUserImage } from '../../services/itemData'
 
 const route = useRoute()
 const router = useRouter()

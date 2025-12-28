@@ -98,7 +98,7 @@ const loadData = async () => {
         }
       } catch (e) {}
       
-      if (p.uploader_id) userIds.add(p.uploader_id)
+      if (p.user_id) userIds.add(p.user_id)
 
       return {
         ...p,
@@ -119,7 +119,7 @@ const loadData = async () => {
         users.forEach(u => userMap[u.id] = u.username)
         
         parsedList.forEach(p => {
-          p.authorName = userMap[p.uploader_id] || '未知用户'
+          p.authorName = userMap[p.user_id] || '未知用户'
         })
       }
     }

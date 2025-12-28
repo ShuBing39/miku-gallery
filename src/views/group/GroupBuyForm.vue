@@ -72,10 +72,10 @@
   <script setup>
   import { ref, reactive } from 'vue'
   import { useRouter } from 'vue-router'
-  import { scrapeOfficialSite } from '../services/scraperService'
-  import { createGroupBuy } from '../services/groupBuyService'
-  import { useUserStore } from '../stores/userStore'
-  import { uploadImage } from '../services/storage'
+  import { scrapeOfficialSite } from '../../services/scraperService'
+  import { createGroupBuy } from '../../services/groupBuyService'
+  import { useUserStore } from '../../stores/userStore'
+  import { uploadImage } from '../../services/storage'
   
   const router = useRouter()
   const userStore = useUserStore()
@@ -124,7 +124,7 @@
   
       const payload = {
         ...form,
-        uploader_id: userStore.user.id,
+        user_id: userStore.user.id,
         qr_code_url: qrUrl
       }
   

@@ -21,6 +21,13 @@
     errorMsg.value = ''
   
     try {
+      // ✅ 安全检查 1: 用户名格式校验 (防止特殊符号/脚本注入)
+      const usernameRegex = /^[\u4e00-\u9fa5a-zA-Z0-9_-]+$/
+      if (!usernameRegex.test(username.value)) {
+        throw new Error('用户名只能包含中文、英文、数字、下划线和减号')
+      }
+
+      // ✅ 安全检查 2: 密码长度校验
       if (password.value.length < 6) throw new Error('密码长度至少需要6位')
       
       // 调用注册
@@ -42,7 +49,9 @@
   
     } catch (err) {
       console.error(err)
-      errorMsg.value = err.message.replace('Database error saving new user', '验证失败')
+      // 这里的 replace 是为了把 Supabase 可能返回的晦涩英文报错转成中文提示
+      // 注意：如果 Supabase 升级改变了报错文案，这里的替换可能会失效
+      errorMsg.value = err.message.replace('Database error saving new user', '验证失败：可能是邀请码无效或用户名已存在') || err.message
     } finally {
       loading.value = false
     }
@@ -58,7 +67,7 @@
           <form @submit.prevent="handleRegister">
             <div class="input-group">
               <label>昵称 (ID)</label>
-              <input v-model="username" type="text" placeholder="比如: 葱葱人" required />
+              <input v-model="username" type="text" placeholder="比如: 葱葱人 (仅限中英文/数字/下划线)" required />
             </div>
     
             <div class="input-group">

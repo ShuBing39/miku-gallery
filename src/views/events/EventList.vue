@@ -92,15 +92,16 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { getEvents } from '../services/eventData'
-import { useUserStore } from '../stores/userStore'
+// ✅ 修正路径：../../
+import { getEvents } from '../../services/eventData'
+import { useUserStore } from '../../stores/userStore'
 
 const router = useRouter()
 const userStore = useUserStore()
 const events = ref([])
 const loading = ref(true)
 const currentCategory = ref('all')
-const hideEnded = ref(false) // 默认为 false，显示所有
+const hideEnded = ref(false) 
 
 const categories = [
   { id: 'all', name: 'ALL' },
@@ -126,7 +127,7 @@ const isEnded = (ev) => {
   return now > end
 }
 
-// ✅ 核心逻辑：双重过滤
+// 核心逻辑：双重过滤
 const filteredEvents = computed(() => {
   let result = events.value
 
@@ -195,7 +196,6 @@ const goToEdit = (id) => {
 .filter-chip { background: rgba(255,255,255,0.3); border: 1px solid rgba(255,255,255,0.5); padding: 5px 14px; border-radius: 20px; color: #fff; cursor: pointer; transition: 0.2s; backdrop-filter: blur(4px); font-size: 13px; font-weight: 500; }
 .filter-chip.active, .filter-chip:hover { background: white; color: #2196f3; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
 
-/* 🔥 开关样式 */
 .toggle-row { display: flex; align-items: center; gap: 8px; color: white; font-size: 14px; background: rgba(0,0,0,0.1); padding: 5px 15px; border-radius: 20px; }
 .toggle-switch { position: relative; display: inline-block; width: 36px; height: 20px; }
 .toggle-switch input { opacity: 0; width: 0; height: 0; }
@@ -209,7 +209,6 @@ input:checked + .slider:before { transform: translateX(16px); }
 .event-card { background: white; border-radius: 10px; overflow: hidden; border: 1px solid #eee; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; display: flex; flex-direction: column; }
 .event-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.06); }
 
-/* 灰色卡片样式 */
 .event-card.ended-card { filter: grayscale(100%); opacity: 0.7; }
 .event-card.ended-card:hover { filter: grayscale(0%); opacity: 1; }
 

@@ -108,16 +108,16 @@
 </template>
 
 <script setup>
-// ... (Imports and setup same as before) ...
 import { ref, onMounted, computed, reactive, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useUserStore } from '../stores/userStore'
-import { useProjectStore } from '../stores/projectStore'
-import * as api from '../services/projectData' 
-import ProjectHeader from '../components/project/ProjectHeader.vue'
-import TimelineTab from '../components/project/TimelineTab.vue'
-import TasksTab from '../components/project/TasksTab.vue'
-import TeamTab from '../components/project/TeamTab.vue'
+// ✅ 修正路径引用：全部改为 ../../
+import { useUserStore } from '../../stores/userStore'
+import { useProjectStore } from '../../stores/projectStore'
+import * as api from '../../services/projectData' 
+import ProjectHeader from '../../components/project/ProjectHeader.vue'
+import TimelineTab from '../../components/project/TimelineTab.vue'
+import TasksTab from '../../components/project/TasksTab.vue'
+import TeamTab from '../../components/project/TeamTab.vue'
 
 const route = useRoute(); const router = useRouter(); const userStore = useUserStore(); const projectStore = useProjectStore()
 const projectId = route.params.id; const currentTab = ref('overview')

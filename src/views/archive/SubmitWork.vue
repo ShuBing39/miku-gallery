@@ -40,28 +40,17 @@
             <label class="big-label">📅 来自哪场活动？<span class="required">*</span></label>
             <select v-model="dojinQuickForm.event_id" required class="big-select">
               <option value="" disabled selected>请选择 (系统已自动推荐近期活动)</option>
-              
               <optgroup v-if="sortedEvents.hot.length" label="🔥 正在进行 / 刚刚结束 (推荐)">
-                <option v-for="ev in sortedEvents.hot" :key="ev.id" :value="ev.id">
-                  {{ ev.localized_title || ev.name }} 
-                </option>
+                <option v-for="ev in sortedEvents.hot" :key="ev.id" :value="ev.id">{{ ev.localized_title || ev.name }}</option>
               </optgroup>
-
               <optgroup v-if="sortedEvents.upcoming.length" label="📅 即将开始">
-                <option v-for="ev in sortedEvents.upcoming" :key="ev.id" :value="ev.id">
-                  {{ ev.localized_title || ev.name }}
-                </option>
+                <option v-for="ev in sortedEvents.upcoming" :key="ev.id" :value="ev.id">{{ ev.localized_title || ev.name }}</option>
               </optgroup>
-
               <optgroup v-if="sortedEvents.past.length" label="🕒 往期活动">
-                <option v-for="ev in sortedEvents.past" :key="ev.id" :value="ev.id">
-                  {{ ev.localized_title || ev.name }}
-                </option>
+                <option v-for="ev in sortedEvents.past" :key="ev.id" :value="ev.id">{{ ev.localized_title || ev.name }}</option>
               </optgroup>
-
               <option value="unknown">❓ 忘记了 / 待认领活动</option>
             </select>
-            <p class="hint-mini">列表中显示的是简称，方便查找。如果没有找到，请选“待认领”哦~</p>
           </div>
 
           <div class="form-group">
@@ -158,7 +147,6 @@ import { supabase } from '../../services/supabase'
 import { uploadImage } from '../../services/storage'
 
 const userStore = useUserStore()
-// ✅ 默认激活“同人一键投递”，方便现场用户
 const activeTab = ref('dojin_quick')
 const isSubmitting = ref(false)
 
@@ -178,12 +166,10 @@ onMounted(async () => {
 })
 
 const loadEventOptions = async () => {
-  // ✅ 修正：现在从 'events' 表读取数据，而不是 'items'
-  // 这样就彻底把 官方活动 和 普通周边/同人企划 分开了
   const { data, error } = await supabase
     .from('events')
     .select('id, name, localized_title, start_date, end_date')
-    .order('start_date', { ascending: false }) // 先按时间倒序拿
+    .order('start_date', { ascending: false })
     .limit(50)
 
   if (!error && data) {
@@ -191,54 +177,30 @@ const loadEventOptions = async () => {
   }
 }
 
-// ✅ 智能排序逻辑 (适配新的 events 表结构)
 const sortedEvents = computed(() => {
   const now = new Date().getTime()
   const oneDay = 24 * 60 * 60 * 1000
   const sevenDays = 7 * oneDay
-
-  const hot = []
-  const upcoming = []
-  const past = []
+  const hot = [], upcoming = [], past = []
 
   rawEventList.value.forEach(ev => {
-    // events 表使用的是 start_date 和 end_date
     const start = new Date(ev.start_date).getTime()
-    // 如果没有结束时间，默认持续1天
     const end = ev.end_date ? new Date(ev.end_date).getTime() : start + oneDay
-
-    // 逻辑：
-    // 1. 进行中/近期: (开始时间 <= 现在) 且 (现在 <= 结束时间 + 7天缓冲期)
-    // 2. 即将开始: (开始时间 > 现在)
-    // 3. 往期: (现在 > 结束时间 + 7天)
-    
-    if (start > now) {
-      upcoming.push(ev)
-    } else if (now <= end + sevenDays) {
-      hot.push(ev)
-    } else {
-      past.push(ev)
-    }
+    if (start > now) upcoming.push(ev)
+    else if (now <= end + sevenDays) hot.push(ev)
+    else past.push(ev)
   })
 
-  // 近期活动按“开始时间”倒序（最近开始的在最前）
   hot.sort((a, b) => new Date(b.start_date) - new Date(a.start_date))
-  // 即将开始按“开始时间”正序（越近的越靠前）
   upcoming.sort((a, b) => new Date(a.start_date) - new Date(b.start_date))
-  // 往期按“开始时间”倒序
   past.sort((a, b) => new Date(b.start_date) - new Date(a.start_date))
-
   return { hot, upcoming, past }
 })
 
 const handleFileChange = (e, type) => {
   const file = e.target.files[0]
   if (!file) return
-  
-  if (file.size > 5 * 1024 * 1024) {
-    alert('图片太大啦，请选择5MB以内的图片哦')
-    return
-  }
+  if (file.size > 5 * 1024 * 1024) return alert('图片太大啦，请选择5MB以内的图片哦')
 
   const previewUrl = URL.createObjectURL(file)
   if (type === 'work') { workFile.value = file; workPreview.value = previewUrl }
@@ -256,6 +218,7 @@ const submitToDb = async (table, data, file, storagePathPrefix) => {
         imageUrl = await uploadImage('user_uploads', path, file)
     }
     
+    // 🚩 [统一] 确保所有投递都带有 user_id
     const payload = {
         ...data,
         user_id: userStore.user.id,
@@ -277,21 +240,31 @@ const submitToDb = async (table, data, file, storagePathPrefix) => {
   }
 }
 
+// 🚩 [修复] 修正同人作品投递逻辑
 const handleSubmitWork = () => {
-    submitToDb('works', {
-        ...workForm,
+    // 1. 表名修正：works -> items (统一存在 items 表)
+    // 2. 字段修正：creator_name -> author (数据库通常叫 author)
+    // 3. 字段修正：title -> name (items 表通常叫 name)
+    submitToDb('items', {
+        name: workForm.title,  // 映射 title 到 name
+        author: workForm.creator_name, // 映射 creator_name 到 author
+        category: '同人作品',  // 默认分类
+        description: `类型: ${workForm.type}\n链接: ${workForm.link_url}\n简介: ${workForm.description}`, // 整合信息到描述
         is_fan_work: true 
     }, workFile.value, 'works')
 }
 
+// 🚩 [修复] 修正官方制品投递逻辑
 const handleSubmitProduct = () => {
     submitToDb('items', {
         ...productForm,
+        // 确保没有多余字段
         is_fan_work: false, 
         category: productForm.category || '未分类制品'
     }, productFile.value, 'items')
 }
 
+// 🚩 [修复] 修正快速投递逻辑
 const handleSubmitDojinQuick = () => {
     if (!dojinQuickFile.value) return alert('请拍摄或选择一张照片哦 📸')
     if (!dojinQuickForm.event_id) return alert('请选择来源活动 📅')
@@ -300,34 +273,31 @@ const handleSubmitDojinQuick = () => {
         name: dojinQuickForm.name || '同人周边/无料', 
         category: '同人制品', 
         is_fan_work: true, 
-        description: dojinQuickForm.creator_name ? `画师/制作: ${dojinQuickForm.creator_name}` : null, 
-        // 如果选了 unknown，则 event_id 设为 null，这样就会进入“待认领”
+        author: dojinQuickForm.creator_name, // 映射 creator_name -> author
+        description: '现场一键投递', 
         event_id: dojinQuickForm.event_id === 'unknown' ? null : dojinQuickForm.event_id 
     }
     
     submitToDb('items', finalData, dojinQuickFile.value, 'items_dojin')
 }
-
 </script>
 
 <style scoped>
+/* 样式保持不变 */
 .submit-container { max-width: 800px; margin: 20px auto; padding: 0 15px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 .skin-theme .notebook-paper { background: #fffaf0; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border: 2px solid #eee; position: relative; overflow: hidden; }
 .skin-theme .notebook-paper::before { content: ''; position: absolute; top: 0; left: 30px; width: 2px; height: 100%; background: #ffcdd2; }
 .page-title { text-align: center; color: #555; margin-bottom: 10px; font-family: 'Comic Sans MS', cursive, sans-serif; }
 .page-desc { text-align: center; color: #888; margin-bottom: 30px; font-size: 14px; }
-
 .tabs-nav { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 2px solid #eee; padding-bottom: 10px; overflow-x: auto; }
 .tabs-nav button { background: none; border: none; padding: 10px 15px; cursor: pointer; font-size: 15px; color: #666; font-weight: bold; border-radius: 8px; white-space: nowrap; transition: 0.3s; }
 .tabs-nav button.active { background: #39C5BB; color: white; }
 .tabs-nav button.dojin-tab { color: #2e7d32; }
 .tabs-nav button.dojin-tab.active { background: #4caf50; color: white; }
-
 .form-content-box { position: relative; min-height: 300px; }
 .loading-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; }
 .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #39C5BB; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin-bottom: 15px; }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
 .form-group { margin-bottom: 20px; }
 .form-group label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
 .required { color: #ff5252; }
@@ -343,7 +313,6 @@ input:focus, select:focus, textarea:focus { border-color: #39C5BB; outline: none
 .theme-btn { background: #39C5BB; box-shadow: 0 4px 0 #2da8a0; }
 .theme-btn:hover { transform: translateY(2px); box-shadow: 0 2px 0 #2da8a0; }
 .hint-text { font-size: 13px; color: #777; margin-bottom: 15px; background: #f0f0f0; padding: 10px; border-radius: 6px; }
-
 .quick-form .highlight-group { background: rgba(255,255,255,0.6); padding: 15px; border-radius: 12px; border: 1px solid #e0e0e0; }
 .big-label { font-size: 1.1em; color: #2e7d32; }
 .big-upload { min-height: 180px; border-color: #a5d6a7; background: #e8f5e9; }

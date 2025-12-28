@@ -184,12 +184,12 @@
       projectData.profiles = { username: '未知用户', avatar_url: '' }
   
       // 2. 查团长 (✅ 修正：查 username)
-      if (projectData.uploader_id) {
+      if (projectData.user_id) {
           try {
               const { data: userData, error: uError } = await supabase
                   .from('profiles')
                   .select('username, avatar_url') // 👈 改成了 username
-                  .eq('id', projectData.uploader_id)
+                  .eq('id', projectData.user_id)
                   .single()
               
               if (!uError && userData) {

@@ -53,7 +53,13 @@
         <div v-else class="item-list">
           <div v-for="item in latestGoods" :key="item.id" class="list-item" @click="handleItemClick(item)">
             <img :src="fixUrl(item.image_url)" class="item-thumb" referrerpolicy="no-referrer" @error="handleImgError"/>
-            <div class="item-info"><h4 class="item-title">{{ item.name }}</h4><div class="item-meta"><span class="date">{{ formatDate(item.release_date) }}</span><span class="tag cat">{{ item.category }}</span></div></div>
+            <div class="item-info">
+              <h4 class="item-title">{{ item.name }}</h4>
+              <div class="item-meta">
+                <span class="date">{{ formatDate(item.release_date || item.created_at) }}</span>
+                <span class="tag cat">{{ item.category || '周边' }}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -64,7 +70,13 @@
         <div v-else class="item-list">
           <div v-for="ev in mixedEvents" :key="ev.uniqueId" class="list-item event-style" @click="handleItemClick(ev)">
             <img :src="fixUrl(ev.image_url)" class="item-thumb" referrerpolicy="no-referrer" @error="handleImgError"/>
-            <div class="item-info"><h4 class="item-title">{{ ev.name }}</h4><div class="item-meta"><span class="status-badge" :class="ev.statusClass">{{ ev.statusText }}</span><span class="tag" :class="ev.isProject ? 'proj-tag' : 'evt-tag'">{{ ev.category }}</span></div></div>
+            <div class="item-info">
+              <h4 class="item-title">{{ ev.name }}</h4>
+              <div class="item-meta">
+                <span class="status-badge" :class="ev.statusClass">{{ ev.statusText }}</span>
+                <span class="tag" :class="ev.isProject ? 'proj-tag' : 'evt-tag'">{{ ev.category || '活动' }}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -87,6 +99,7 @@ const activeIndex = ref(0)
 const homeSearch = ref('')
 let timer = null
 
+// 官方活动关键词
 const OFFICIAL_EVENT_CATEGORIES = ['魔法未来', '雪未来', 'MIKU EXPO', '交响乐会', '演唱会', '联动/咖啡厅', '展览/漫展', '线下活动', '同人活动']
 
 onMounted(() => {
@@ -105,10 +118,33 @@ onUnmounted(() => { if(timer) clearInterval(timer) })
 const goToEncyclopedia = () => { if (homeSearch.value.trim()) { router.push({ path: '/encyclopedia', query: { q: homeSearch.value.trim() } }) } else { router.push('/encyclopedia') } }
 const handleBannerClick = (b) => { if (b.link_url) { if (b.link_url.startsWith('http')) window.open(b.link_url, '_blank'); else router.push(b.link_url) } }
 const handleItemClick = (item) => { if (item.isProject) { router.push(`/project/${item.id}`) } else if (item.link && item.link.startsWith('http')) { window.open(item.link, '_blank') } else { router.push(`/item/${item.id}`) } }
-const getEventStatus = (ev) => { const today = new Date().toISOString().split('T')[0]; if (ev.release_date && today < ev.release_date) return { text: '即将开始', class: 'upcoming' }; if (ev.event_end_date && today > ev.event_end_date) return { text: '已结束', class: 'ended' }; return { text: '进行中', class: 'active' } }
+
+// 辅助函数：根据日期判断状态 (增加了容错，防止日期字段缺失报错)
+const getEventStatus = (ev) => {
+  // 如果是企划
+  if (ev.isProject) {
+    if (ev.recruit_status === 'recruiting') return { text: '招募中', class: 'active' }
+    if (ev.recruit_status === 'ended') return { text: '已结束', class: 'ended' }
+    return { text: '进行中', class: 'active' }
+  }
+  
+  // 如果是活动，且有日期字段
+  if (ev.release_date || ev.event_end_date) {
+    const today = new Date().toISOString().split('T')[0]
+    if (ev.release_date && today < ev.release_date) return { text: '即将开始', class: 'upcoming' }
+    if (ev.event_end_date && today > ev.event_end_date) return { text: '已结束', class: 'ended' }
+  }
+  
+  return { text: '进行中', class: 'active' }
+}
 
 const fetchBanners = async () => { 
-  const { data } = await supabase.from('home_banners').select('*').eq('is_active', true).order('sort_order', { ascending: false }); 
+  // 使用 select('*') 避免因缺少 sort_order 等特定字段报错
+  const { data } = await supabase.from('home_banners').select('*')
+  // 如果有 sort_order 字段，就在前端排序；如果没有，就原样返回
+  if (data && data.length > 0 && data[0].sort_order !== undefined) {
+    return data.sort((a, b) => b.sort_order - a.sort_order)
+  }
   return data || [] 
 }
 
@@ -116,28 +152,111 @@ const startCarousel = () => {
   timer = setInterval(() => { if (banners.value.length > 1) { activeIndex.value = (activeIndex.value + 1) % banners.value.length } }, 5000) 
 }
 
+// ✅ 核心修改：安全获取数据逻辑
 const fetchData = async () => {
-  // 获取周边
-  const { data: rawItems } = await supabase.from('items').select('id, name, image_url, category, release_date, status').eq('status', 'approved').order('created_at', { ascending: false }).limit(30)
-  if (rawItems) {
-    latestGoods.value = rawItems.filter(i => !OFFICIAL_EVENT_CATEGORIES.includes(i.category) && i.category !== '同人企划' && i.category !== '企划').slice(0, 5)
+  try {
+    // 1. 获取周边：使用 select('*') 获取所有存在的列
+    const { data: rawItems, error: err1 } = await supabase
+      .from('items')
+      .select('*') 
+      .order('created_at', { ascending: false })
+      .limit(50) // 多取一点，以便在前端过滤
+
+    if (err1) throw err1
+
+    if (rawItems) {
+      // 在前端进行过滤，而不是在数据库查询时过滤
+      // 这样如果 status 列不存在，item.status 就是 undefined，代码不会崩，只会显示所有数据
+      let filtered = rawItems.filter(i => {
+        // 如果 category 是活动类，排除
+        if (OFFICIAL_EVENT_CATEGORIES.includes(i.category)) return false
+        // 如果 category 是企划类，排除
+        if (i.category === '同人企划' || i.category === '企划') return false
+        
+        // 如果数据库里真的有 status 列，且不是 approved，排除
+        // 如果没有 status 列 (undefined)，则默认通过 (避免新库空数据不显示)
+        if (i.status && i.status !== 'approved') return false
+        
+        return true
+      })
+      latestGoods.value = filtered.slice(0, 5)
+    }
+
+    // 2. 获取活动
+    const p1 = supabase
+      .from('items')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(20)
+
+    // 3. 获取企划
+    const p2 = supabase
+      .from('projects')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    const [res1, res2] = await Promise.all([p1, p2])
+
+    let combined = []
+
+    // 处理活动数据
+    if (res1.data) {
+      const events = res1.data.filter(e => {
+        // 只保留活动类别
+        if (!OFFICIAL_EVENT_CATEGORIES.includes(e.category)) return false
+        // 如果有 status 字段则检查，没有则忽略
+        if (e.status && e.status !== 'approved') return false
+        return true
+      })
+      
+      combined = events.map(e => ({ 
+        ...e, 
+        isProject: false, 
+        uniqueId: 'ev_' + e.id, 
+        statusClass: getEventStatus(e).class, 
+        statusText: getEventStatus(e).text 
+      }))
+    }
+
+    // 处理企划数据
+    if (res2.data) {
+      const projects = res2.data.filter(p => {
+        // 如果有 allow_external 字段则检查
+        if (p.allow_external === false) return false
+        // 如果有 recruit_status 字段则检查
+        if (p.recruit_status === 'ended') return false
+        return true
+      })
+
+      const projectsMapped = projects.map(p => ({ 
+        id: p.id, 
+        name: p.name, 
+        image_url: p.image_url, 
+        category: '同人企划', 
+        created_at: p.created_at, 
+        isProject: true, 
+        uniqueId: 'pj_' + p.id, 
+        // 传递原始字段以便 getEventStatus 使用
+        recruit_status: p.recruit_status, 
+        statusClass: getEventStatus({...p, isProject: true}).class, 
+        statusText: getEventStatus({...p, isProject: true}).text 
+      }))
+      combined = [...combined, ...projectsMapped] 
+    }
+
+    combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    mixedEvents.value = combined.slice(0, 6)
+
+  } catch (err) {
+    console.error('Home fetchData safe mode error:', err)
   }
-  // 获取活动和企划混合列表
-  const p1 = supabase.from('items').select('id, name, image_url, category, release_date, event_end_date').in('category', OFFICIAL_EVENT_CATEGORIES).eq('status', 'approved').order('created_at', { ascending: false }).limit(5)
-  const p2 = supabase.from('projects').select('id, name, image_url, recruit_status, created_at').eq('allow_external', true).neq('recruit_status', 'ended').order('created_at', { ascending: false }).limit(5)
-  const [res1, res2] = await Promise.all([p1, p2])
-  let combined = []
-  if (res1.data) combined = res1.data.map(e => ({ ...e, isProject: false, uniqueId: 'ev_' + e.id, statusClass: getEventStatus(e).class, statusText: getEventStatus(e).text }))
-  if (res2.data) { const projectsMapped = res2.data.map(p => ({ id: p.id, name: p.name, image_url: p.image_url, category: '同人企划', created_at: p.created_at, isProject: true, uniqueId: 'pj_' + p.id, statusClass: p.recruit_status === 'recruiting' ? 'active' : 'ended', statusText: p.recruit_status === 'recruiting' ? '招募中' : (p.recruit_status === 'ongoing' ? '进行中' : '已结束') })); combined = [...combined, ...projectsMapped] }
-  combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-  mixedEvents.value = combined.slice(0, 6)
 }
 </script>
 
 <style scoped>
+/* 样式完全保留 */
 .home-container { max-width: 1200px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', sans-serif; color: #333; }
-
-/* 搜索与操作区 */
 .hero-search-section { margin-bottom: 30px; display: flex; flex-direction: column; align-items: center; gap: 15px; }
 .search-wrap { display: flex; width: 100%; max-width: 700px; box-shadow: 0 8px 25px rgba(57, 197, 187, 0.15); border-radius: 40px; background: white; padding: 5px; border: 2px solid #e0f2f1; transition: 0.3s; }
 .search-wrap:hover { box-shadow: 0 10px 30px rgba(57, 197, 187, 0.25); }
@@ -148,29 +267,21 @@ const fetchData = async () => {
 .btn-hero-action:hover { border-color: #39C5BB; color: #39C5BB; }
 .btn-hero-action.primary { background: #39C5BB; color: white; border: none; box-shadow: 0 4px 10px rgba(57, 197, 187, 0.3); }
 .btn-hero-action.primary:hover { background: #2da8a0; transform: translateY(-2px); }
-
-/* 导航网格 - 自适应布局 */
 .nav-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 15px; margin-bottom: 40px; }
 .nav-card { background: white; border: 1px solid #eee; border-radius: 12px; padding: 20px; cursor: pointer; transition: transform 0.2s; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .nav-card:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
 .icon { font-size: 28px; margin-bottom: 8px; }
 .nav-card h3 { margin: 0 0 5px 0; font-size: 15px; color: #333; font-weight: bold; }
 .nav-card p { margin: 0; font-size: 12px; color: #888; }
-
-/* 卡片底部颜色条 */
 .wiki-card { border-bottom: 3px solid #39c5bb; }
 .kb-card { border-bottom: 3px solid #ffa000; } 
-.gb-card { border-bottom: 3px solid #ff5252; } /* 🔴 拼团色 */
+.gb-card { border-bottom: 3px solid #ff5252; }
 .ticket-card { border-bottom: 3px solid #00e676; }
 .event-card { border-bottom: 3px solid #8b5cf6; } 
 .project-card { border-bottom: 3px solid #f472b6; }
 .profile-card { border-bottom: 3px solid #fbbf24; }
-
-/* 内容分区布局 */
 .content-split { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
 @media (max-width: 768px) { .content-split { grid-template-columns: 1fr; } }
-
-/* 轮播图 */
 .banner-wrapper { height: 200px; border-radius: 12px; overflow: hidden; position: relative; margin-bottom: 20px; background: #333; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
 .carousel-container { width: 100%; height: 100%; position: relative; }
 .banner-slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: center; opacity: 0; transition: opacity 0.5s ease; cursor: pointer; }
@@ -181,8 +292,6 @@ const fetchData = async () => {
 .indicators { position: absolute; bottom: 15px; right: 20px; display: flex; gap: 8px; z-index: 3; }
 .indicators span { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.5); cursor: pointer; transition: 0.3s; }
 .indicators span.active { background: white; transform: scale(1.2); }
-
-/* 列表通用 */
 .section-col { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); }
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
 .section-header h3 { margin: 0; font-size: 18px; color: #2c3e50; border-left: 4px solid #39C5BB; padding-left: 10px; }

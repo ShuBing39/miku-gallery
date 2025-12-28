@@ -7,8 +7,8 @@ export const getProjectDetail = async (id) => {
   const { data, error } = await supabase.from('projects').select('*').eq('id', id).single()
   if (error) throw error
   
-  if (data.uploader_id) {
-    const { data: u } = await supabase.from('profiles').select('username').eq('id', data.uploader_id).single()
+  if (data.user_id) {
+    const { data: u } = await supabase.from('profiles').select('username').eq('id', data.user_id).single()
     data.uploader_name = u?.username || '未知'
   }
   return data
@@ -39,7 +39,7 @@ export const getProjectsList = async (search = '') => {
   if (error) throw error
   if (!data || data.length === 0) return []
 
-  const userIds = [...new Set(data.map(p => p.uploader_id).filter(Boolean))]
+  const userIds = [...new Set(data.map(p => p.user_id).filter(Boolean))]
   if (userIds.length > 0) {
     const { data: profiles } = await supabase
       .from('profiles')
@@ -51,7 +51,7 @@ export const getProjectsList = async (search = '') => {
     
     return data.map(p => ({
       ...p,
-      uploader_name: map[p.uploader_id] || '未知用户'
+      uploader_name: map[p.user_id] || '未知用户'
     }))
   }
 
@@ -92,12 +92,12 @@ export const getGroupBuyList = async (search = '') => {
   
   // 同样补全团长名字
   if (!data || data.length === 0) return []
-  const userIds = [...new Set(data.map(p => p.uploader_id).filter(Boolean))]
+  const userIds = [...new Set(data.map(p => p.user_id).filter(Boolean))]
   if (userIds.length > 0) {
     const { data: profiles } = await supabase.from('profiles').select('id, username').in('id', userIds)
     const map = {}
     profiles?.forEach(p => map[p.id] = p.username)
-    return data.map(p => ({ ...p, uploader_name: map[p.uploader_id] || '神秘团长' }))
+    return data.map(p => ({ ...p, uploader_name: map[p.user_id] || '神秘团长' }))
   }
 
   return data
@@ -196,10 +196,10 @@ export const createProject = async (payload) => {
   if (error) throw error
 
   // 自动将创建者设为 Owner
-  if (project && payload.uploader_id) {
+  if (project && payload.user_id) {
     await supabase.from('project_members').insert({
       project_id: project.id,
-      user_id: payload.uploader_id,
+      user_id: payload.user_id,
       role: '主催', // 团购模式下这个Role不显示，但底层权限逻辑需要
       is_approved: true
     })

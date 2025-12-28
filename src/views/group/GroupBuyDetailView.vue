@@ -77,7 +77,7 @@
   })
   
   // 权限与状态
-  const isOwner = computed(() => props.currentUser?.id === props.project.uploader_id)
+  const isOwner = computed(() => props.currentUser?.id === props.project.user_id)
   const statusText = computed(() => props.project.status === 'active' ? '正在招募' : '已截团')
   
   // 规则文本 (复用逻辑)
