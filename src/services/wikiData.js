@@ -9,15 +9,16 @@ const EXCLUDE_CATS = [
   '企划'
 ]
 
-// ✅ 1. 保留原有功能：按月份获取数据
+// ✅ 1. 按月份获取数据 (已修复：改为获取所有字段，包括 price_jpy 和 cover_image_url)
 export const fetchWikiByMonth = async (year, month) => {
   const startStr = `${year}-${month}-01`
   // 计算下个月1号
   const nextMonthDate = new Date(year, month, 1) 
   const nextMonthStr = nextMonthDate.toISOString()
 
+  // 📝 修改点：这里改成了 select('*')
   const { data, error } = await supabase.from('items')
-    .select('id, name, price, market_price, image_url, character, category, author, release_date, is_fan_work')
+    .select('*') 
     .eq('status', 'approved')
     .not('category', 'in', `(${EXCLUDE_CATS.map(c=>`"${c}"`).join(',')})`)
     .gte('release_date', startStr)
@@ -47,13 +48,14 @@ export const toggleSubscription = async (wikiId, userId) => {
   }
 }
 
-// ✅ 4. 保留原有功能：搜索数据
+// ✅ 4. 搜索数据 (已修复：改为获取所有字段)
 export const searchWiki = async (keyword) => {
   const rawQ = keyword.trim()
   if (!rawQ) return []
 
+  // 📝 修改点：这里也改成了 select('*')
   let query = supabase.from('items')
-    .select('id, name, price, market_price, image_url, character, category, author, release_date, is_fan_work')
+    .select('*')
     .eq('status', 'approved')
     .not('category', 'in', `(${EXCLUDE_CATS.map(c=>`"${c}"`).join(',')})`)
 

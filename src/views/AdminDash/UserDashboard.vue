@@ -21,6 +21,7 @@
             {{ userStore.profile?.username || userStore.user?.user_metadata?.username || '未命名用户' }}
             <span v-if="isAdmin" class="role-tag admin">管理员</span>
           </h2>
+          <p class="uid-tag">UID: {{ userStore.profile?.user_no || '---' }}</p>
           <p class="email">{{ userStore.user?.email }}</p>
           
           <div class="badges">
@@ -164,7 +165,6 @@ import { useUserStore } from '../../stores/userStore'
 import { supabase } from '../../services/supabase'
 import { uploadImage } from '../../services/storage'
 import { getIdentityStatus } from '../../services/authService'
-// ✅ 引入新服务
 import { getMyImages, getMyWikiRevisions } from '../../services/userData'
 
 const router = useRouter()
@@ -172,7 +172,7 @@ const userStore = useUserStore()
 
 // 状态
 const currentTab = ref('projects')
-const contribSubTab = ref('images') // ✅ 贡献页面的子Tab
+const contribSubTab = ref('images')
 const showEditModal = ref(false)
 const fileInput = ref(null)
 const editForm = reactive({ username: '' })
@@ -180,8 +180,8 @@ const editForm = reactive({ username: '' })
 // 数据容器
 const myProjects = ref([])
 const myTasks = ref([])
-const myImages = ref([])      // ✅ 新增
-const myRevisions = ref([])   // ✅ 新增
+const myImages = ref([])
+const myRevisions = ref([])
 
 // 认证状态
 const verifyStatus = ref('none')
@@ -205,7 +205,7 @@ onMounted(async () => {
     fetchVerifyStatus(),
     fetchMyProjects(),
     fetchMyTasks(),
-    fetchContributions() // ✅ 加载新数据
+    fetchContributions()
   ])
 })
 
@@ -217,17 +217,18 @@ const fetchVerifyStatus = async () => {
   }
 }
 
+// ✅ 修正：使用 user_id 查询，保持代码一致性
 const fetchMyProjects = async () => {
   const { data } = await supabase.from('projects').select('*').eq('user_id', userStore.user.id)
   if (data) myProjects.value = data
 }
 
 const fetchMyTasks = async () => {
+  // 这里的 assignee_id 保持原样，因为你之前的代码就是 assignee_id
   const { data } = await supabase.from('project_tasks_v2').select('*').eq('assignee_id', userStore.user.id)
   if (data) myTasks.value = data
 }
 
-// ✅ 获取贡献数据 (返图 + 纠错)
 const fetchContributions = async () => {
   const userId = userStore.user.id
   const [imgs, revs] = await Promise.all([
@@ -238,7 +239,6 @@ const fetchContributions = async () => {
   myRevisions.value = revs
 }
 
-// 辅助函数
 const getStatusLabel = (status) => {
   if (status === 'approved') return '已通过'
   if (status === 'rejected') return '已驳回'
@@ -249,7 +249,6 @@ const formatDate = (dateStr) => {
   return `${d.getMonth()+1}/${d.getDate()}`
 }
 
-// --- 交互逻辑 (保留原样) ---
 const triggerAvatarUpload = () => fileInput.value.click()
 const handleAvatarUpload = async (e) => {
   const file = e.target.files[0]
@@ -295,6 +294,7 @@ const handleLogout = async () => {
 .avatar-wrapper:hover .avatar-overlay { opacity: 1; }
 .info { flex: 1; }
 .username { margin: 0 0 5px 0; font-size: 24px; display: flex; align-items: center; gap: 10px; color: #333; }
+.uid-tag { margin: 0 0 5px 0; font-size: 14px; color: #39C5BB; font-weight: bold; font-family: 'Courier New', monospace; background: #e0f2f1; display: inline-block; padding: 2px 6px; border-radius: 4px; }
 .role-tag { font-size: 12px; background: #673ab7; color: white; padding: 2px 8px; border-radius: 4px; vertical-align: middle; }
 .email { margin: 0; color: #888; font-size: 14px; }
 .badges { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }

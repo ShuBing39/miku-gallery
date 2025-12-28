@@ -8,6 +8,10 @@ dotenv.config();
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
+// 🔑 你的管理员 ID (从刚才的修复脚本里拿来的)
+// 这样爬下来的商品会自动归属到你的名下，方便管理
+const ADMIN_USER_ID = '13483eb4-8d32-4b7c-84d3-2d7b3f8abe04'; 
+
 if (!SUPABASE_KEY) {
   console.error("❌ 错误：找不到 Key！请确认 .env 里有 SUPABASE_SERVICE_KEY");
   process.exit(1);
@@ -51,28 +55,23 @@ async function scrapeMagicalMirai() {
       // 必须包含价格符号 (¥ 或 円) 或者是 Price 单词
       if (text.match(/(¥|円|Price|PRICE)/)) {
         
-        // 1. 提取名称 (通常在 h3, h4, strong 或 p 中)
+        // 1. 提取名称 (通常在 h3, h4, strong, .name, .title').first().text().trim();
         let name = $parent.find('h3, h4, strong, .name, .title').first().text().trim();
-        // 如果找不到标签，尝试取第一行非空文本
         if (!name) {
             const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 2);
             if (lines.length > 0) name = lines[0];
         }
-        // 再次兜底
         if (!name) name = '魔法未来2025周边';
-        // 截断过长的名字
         if (name.length > 60) name = name.substring(0, 60) + '...';
 
-        // 2. 补全图片链接 (官网通常是相对路径)
+        // 2. 补全图片链接
         let fullImage = src;
         if (!src.startsWith('http')) {
-          // 拼接 base url
           const baseUrlObj = new URL(MM_GOODS_URL);
-          // 处理类似 '../images/goods/xxx.jpg' 的情况
           fullImage = new URL(src, baseUrlObj.href).href;
         }
 
-        // 3. 提取价格 (数字)
+        // 3. 提取价格
         let price = 0;
         const priceMatch = text.match(/([0-9,]+)\s*(?:円|¥)/);
         if (priceMatch) {
@@ -86,10 +85,17 @@ async function scrapeMagicalMirai() {
              image_url: fullImage,
              price: price,
              link: MM_GOODS_URL,
-             category: '魔法未来', // 🔥 必须完全匹配这个分类
-             author: 'Magical Mirai Official',
-             status: 'approved',   // 🔥 必须是 approved 才能显示
-             release_date: new Date().toISOString().split('T')[0], // 默认为今天
+             category: '魔法未来',
+             author: 'Magical Mirai Official', // 这里的 author 是显示的文字作者
+             status: 'approved',
+             release_date: new Date().toISOString().split('T')[0],
+             
+             // ✅ [新增 1] 明确标记为官方制品 (防止混入同人区)
+             is_fan_work: false, 
+             
+             // ✅ [新增 2] 绑定到管理员 ID (防止成为无主数据)
+             user_id: ADMIN_USER_ID,
+             
              is_ai: false
            });
         }
@@ -113,7 +119,7 @@ async function scrapeMagicalMirai() {
         if (error) console.error(`❌ 入库失败: ${error.message}`);
         else process.stdout.write('✨');
       }
-      await sleep(100); // 稍微慢一点，避免数据库过载
+      await sleep(100); 
     }
     console.log('\n✅ 魔法未来商品抓取完成！');
 

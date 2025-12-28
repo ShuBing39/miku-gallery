@@ -1,60 +1,61 @@
 <template>
-    <div class="step-content">
-      <h3>🚀 第四步：最后确认</h3>
-      <p class="sub-title">设置隐私权限并发布。</p>
-  
-      <div class="section">
-        <div class="option-card" :class="{ active: data.mode === 'online' }" @click="selectMode('online')">
-          <div class="icon">🌏</div>
-          <div class="info">
-            <h4>公开车队 (大厅可见)</h4>
-            <p>进入【拼团大厅】，允许陌生人搜索和下单。适合拼团回血。</p>
-          </div>
-          <div class="check" v-if="data.mode === 'online'">✔</div>
+  <div class="step-content">
+    <h3>🚀 第四步：最后确认</h3>
+    <p class="sub-title">设置隐私权限并发布。</p>
+
+    <div class="section">
+      <div class="option-card" :class="{ active: data.mode === 'online' }" @click="selectMode('online')">
+        <div class="icon">🌏</div>
+        <div class="info">
+          <h4>公开车队 (大厅可见)</h4>
+          <p>进入【拼团大厅】，允许陌生人搜索和下单。适合拼团回血。</p>
         </div>
-  
-        <div class="option-card" :class="{ active: data.mode === 'solo' }" @click="selectMode('solo')">
-          <div class="icon">🔒</div>
-          <div class="info">
-            <h4>私密 / 记账模式</h4>
-            <p>不公开显示，仅生成链接发给群友，或单纯作为团长记账工具。</p>
-          </div>
-          <div class="check" v-if="data.mode === 'solo'">✔</div>
-        </div>
+        <div class="check" v-if="data.mode === 'online'">✔</div>
       </div>
-  
-      <div class="section" v-if="data.mode === 'online'">
-        <h4>📞 联系方式</h4>
-        <div class="contact-row">
-          <select v-model="data.contact.type" class="std-select mini">
-            <option value="qq">QQ群</option>
-            <option value="wechat">微信号</option>
-          </select>
-          <input v-model="data.contact.value" placeholder="请输入群号或微信号..." class="std-input">
+
+      <div class="option-card" :class="{ active: data.mode === 'solo' }" @click="selectMode('solo')">
+        <div class="icon">🔒</div>
+        <div class="info">
+          <h4>私密 / 记账模式</h4>
+          <p>不公开显示，仅生成链接发给群友，或单纯作为团长记账工具。</p>
         </div>
-        <div class="checkbox-row">
-          <label>
-            <input type="checkbox" v-model="data.contact.visible" true-value="joined" false-value="public">
-            仅对已上车(已付款)的成员可见
-          </label>
-        </div>
-      </div>
-  
-      <div class="summary-box">
-        <p><strong>商品数:</strong> {{ data.items.length }} 件</p>
-        <p><strong>汇率:</strong> {{ data.exchange_rate }}</p>
-        <p><strong>模式:</strong> {{ data.mode === 'online' ? '公开招募' : '私密/记账' }}</p>
-      </div>
-  
-      <div class="footer-actions">
-        <button class="btn-prev" @click="$emit('prev')">上一步</button>
-        <button class="btn-submit" @click="submit" :disabled="submitting">
-          {{ submitting ? '🚀 创建中...' : '✨ 确认并开车' }}
-        </button>
+        <div class="check" v-if="data.mode === 'solo'">✔</div>
       </div>
     </div>
+
+    <div class="section" v-if="data.mode === 'online'">
+      <h4>📞 联系方式</h4>
+      <div class="contact-row">
+        <select v-model="data.contact.type" class="std-select mini">
+          <option value="qq">QQ群</option>
+          <option value="wechat">微信号</option>
+        </select>
+        <input v-model="data.contact.value" placeholder="请输入群号或微信号..." class="std-input">
+      </div>
+      <div class="checkbox-row">
+        <label>
+          <input type="checkbox" v-model="data.contact.visible" true-value="joined" false-value="public">
+          仅对已上车(已付款)的成员可见
+        </label>
+      </div>
+    </div>
+
+    <div class="summary-box">
+      <p><strong>商品数:</strong> {{ data.items.length }} 件</p>
+      <p><strong>汇率:</strong> {{ data.exchange_rate }}</p>
+      <p><strong>模式:</strong> {{ data.mode === 'online' ? '公开招募' : '私密/记账' }}</p>
+      <p v-if="data.linked_item_id"><strong>🔗 关联Wiki:</strong> 已绑定 (ID: {{ data.linked_item_id }})</p>
+    </div>
+
+    <div class="footer-actions">
+      <button class="btn-prev" @click="$emit('prev')">上一步</button>
+      <button class="btn-submit" @click="submit" :disabled="submitting">
+        {{ submitting ? '🚀 创建中...' : '✨ 确认并开车' }}
+      </button>
+    </div>
+  </div>
 </template>
-  
+
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -81,14 +82,15 @@ if (props.data.mode === 'online' && !props.data.contact.value) {
 submitting.value = true
 try {
     const payload = {
-    name: props.data.title || '未命名团购',
-    description: '拼团数据', // 简短描述，具体数据存 JSON
-    user_id: userStore.user.id,
-    recruit_status: 'recruiting',
-    allow_external: props.data.mode === 'online',
-    image_url: props.data.items[0]?.image_url, 
-    linked_item_id: -1, 
-    status: 'active'
+      name: props.data.title || '未命名团购',
+      description: '拼团数据', // 简短描述，具体数据存 JSON
+      user_id: userStore.user.id,
+      recruit_status: 'recruiting',
+      allow_external: props.data.mode === 'online',
+      image_url: props.data.items[0]?.image_url, 
+      // ✅ 核心修改：使用 Step 1 传入的父集合 ID，如果没有则为空
+      linked_item_id: props.data.linked_item_id || null, 
+      status: 'active'
     }
 
     // 1. 创建基础记录
@@ -116,7 +118,7 @@ try {
 
     alert('🎉 开团成功！')
     
-    // 🔴 修正路由跳转：去新的拼团详情页，而不是旧的企划页
+    // 🔴 路由跳转：去新的拼团详情页
     router.push(`/group-buy/${proj.id}`)
 
 } catch (e) {
@@ -127,7 +129,7 @@ try {
 }
 }
 </script>
-  
+
 <style scoped>
 /* 保持原有样式 */
 .step-content { padding: 10px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }

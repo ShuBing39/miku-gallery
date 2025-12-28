@@ -52,13 +52,18 @@
         <div v-if="loading" class="loading-skel">加载中...</div>
         <div v-else class="item-list">
           <div v-for="item in latestGoods" :key="item.id" class="list-item" @click="handleItemClick(item)">
-            <img :src="fixUrl(item.image_url)" class="item-thumb" referrerpolicy="no-referrer" @error="handleImgError"/>
+            <img :src="getItemImage(item)" class="item-thumb" referrerpolicy="no-referrer" @error="handleImgError"/>
             <div class="item-info">
               <h4 class="item-title">{{ item.name }}</h4>
-              <div class="item-meta">
+              
+              <div v-if="item.sale_info" class="item-sale-info">
+                 {{ item.sale_info }}
+              </div>
+              <div v-else class="item-meta">
                 <span class="date">{{ formatDate(item.release_date || item.created_at) }}</span>
                 <span class="tag cat">{{ item.category || '周边' }}</span>
               </div>
+
             </div>
           </div>
         </div>
@@ -69,7 +74,7 @@
         <div v-if="loading" class="loading-skel">加载中...</div>
         <div v-else class="item-list">
           <div v-for="ev in mixedEvents" :key="ev.uniqueId" class="list-item event-style" @click="handleItemClick(ev)">
-            <img :src="fixUrl(ev.image_url)" class="item-thumb" referrerpolicy="no-referrer" @error="handleImgError"/>
+            <img :src="getItemImage(ev)" class="item-thumb" referrerpolicy="no-referrer" @error="handleImgError"/>
             <div class="item-info">
               <h4 class="item-title">{{ ev.name }}</h4>
               <div class="item-meta">
@@ -99,7 +104,7 @@ const activeIndex = ref(0)
 const homeSearch = ref('')
 let timer = null
 
-// 官方活动关键词
+// 官方活动关键词配置
 const OFFICIAL_EVENT_CATEGORIES = ['魔法未来', '雪未来', 'MIKU EXPO', '交响乐会', '演唱会', '联动/咖啡厅', '展览/漫展', '线下活动', '同人活动']
 
 onMounted(() => {
@@ -115,33 +120,60 @@ onMounted(() => {
 
 onUnmounted(() => { if(timer) clearInterval(timer) })
 
+// 导航跳转逻辑
 const goToEncyclopedia = () => { if (homeSearch.value.trim()) { router.push({ path: '/encyclopedia', query: { q: homeSearch.value.trim() } }) } else { router.push('/encyclopedia') } }
 const handleBannerClick = (b) => { if (b.link_url) { if (b.link_url.startsWith('http')) window.open(b.link_url, '_blank'); else router.push(b.link_url) } }
 const handleItemClick = (item) => { if (item.isProject) { router.push(`/project/${item.id}`) } else if (item.link && item.link.startsWith('http')) { window.open(item.link, '_blank') } else { router.push(`/item/${item.id}`) } }
 
-// 辅助函数：根据日期判断状态 (增加了容错，防止日期字段缺失报错)
+// 🔥 核心新增：智能获取图片 (兼容新爬虫的JSON格式)
+const getItemImage = (item) => {
+  // 1. 优先尝试读取 cover_image_url (新爬虫专门存的单张封面)
+  if (item.cover_image_url) {
+    return fixUrl(item.cover_image_url)
+  }
+
+  // 2. 如果没有封面，尝试解析 image_url
+  if (item.image_url) {
+    const urlStr = item.image_url.trim()
+    
+    // 如果是 JSON 数组字符串 (例如: '["http://...", "http://..."]')
+    if (urlStr.startsWith('[') && urlStr.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(urlStr)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // 取数组里的第一张
+          return fixUrl(parsed[0])
+        }
+      } catch (e) {
+        // 解析失败，忽略错误，继续往下尝试
+      }
+    }
+
+    // 3. 如果不是JSON，或者解析失败，就按普通字符串处理 (兼容旧数据)
+    return fixUrl(urlStr)
+  }
+
+  // 4. 实在没有图片
+  return '' 
+}
+
+// 活动状态判断逻辑
 const getEventStatus = (ev) => {
-  // 如果是企划
   if (ev.isProject) {
     if (ev.recruit_status === 'recruiting') return { text: '招募中', class: 'active' }
     if (ev.recruit_status === 'ended') return { text: '已结束', class: 'ended' }
     return { text: '进行中', class: 'active' }
   }
-  
-  // 如果是活动，且有日期字段
   if (ev.release_date || ev.event_end_date) {
     const today = new Date().toISOString().split('T')[0]
     if (ev.release_date && today < ev.release_date) return { text: '即将开始', class: 'upcoming' }
     if (ev.event_end_date && today > ev.event_end_date) return { text: '已结束', class: 'ended' }
   }
-  
   return { text: '进行中', class: 'active' }
 }
 
 const fetchBanners = async () => { 
-  // 使用 select('*') 避免因缺少 sort_order 等特定字段报错
   const { data } = await supabase.from('home_banners').select('*')
-  // 如果有 sort_order 字段，就在前端排序；如果没有，就原样返回
   if (data && data.length > 0 && data[0].sort_order !== undefined) {
     return data.sort((a, b) => b.sort_order - a.sort_order)
   }
@@ -152,44 +184,37 @@ const startCarousel = () => {
   timer = setInterval(() => { if (banners.value.length > 1) { activeIndex.value = (activeIndex.value + 1) % banners.value.length } }, 5000) 
 }
 
-// ✅ 核心修改：安全获取数据逻辑
+// 数据获取主逻辑
 const fetchData = async () => {
   try {
-    // 1. 获取周边：使用 select('*') 获取所有存在的列
+    // 1. 获取周边 (items表)
     const { data: rawItems, error: err1 } = await supabase
       .from('items')
       .select('*') 
       .order('created_at', { ascending: false })
-      .limit(50) // 多取一点，以便在前端过滤
+      .limit(50) 
 
     if (err1) throw err1
 
     if (rawItems) {
-      // 在前端进行过滤，而不是在数据库查询时过滤
-      // 这样如果 status 列不存在，item.status 就是 undefined，代码不会崩，只会显示所有数据
+      // 过滤出纯周边 (排除官方活动和企划)
       let filtered = rawItems.filter(i => {
-        // 如果 category 是活动类，排除
         if (OFFICIAL_EVENT_CATEGORIES.includes(i.category)) return false
-        // 如果 category 是企划类，排除
         if (i.category === '同人企划' || i.category === '企划') return false
-        
-        // 如果数据库里真的有 status 列，且不是 approved，排除
-        // 如果没有 status 列 (undefined)，则默认通过 (避免新库空数据不显示)
         if (i.status && i.status !== 'approved') return false
-        
         return true
       })
       latestGoods.value = filtered.slice(0, 5)
     }
 
-    // 2. 获取活动
+    // 2. 获取活动 (items表中的活动类)
     const p1 = supabase
       .from('items')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(20)
 
-    // 3. 获取企划
+    // 3. 获取企划 (projects表)
     const p2 = supabase
       .from('projects')
       .select('*')
@@ -203,9 +228,7 @@ const fetchData = async () => {
     // 处理活动数据
     if (res1.data) {
       const events = res1.data.filter(e => {
-        // 只保留活动类别
         if (!OFFICIAL_EVENT_CATEGORIES.includes(e.category)) return false
-        // 如果有 status 字段则检查，没有则忽略
         if (e.status && e.status !== 'approved') return false
         return true
       })
@@ -222,9 +245,7 @@ const fetchData = async () => {
     // 处理企划数据
     if (res2.data) {
       const projects = res2.data.filter(p => {
-        // 如果有 allow_external 字段则检查
         if (p.allow_external === false) return false
-        // 如果有 recruit_status 字段则检查
         if (p.recruit_status === 'ended') return false
         return true
       })
@@ -237,7 +258,6 @@ const fetchData = async () => {
         created_at: p.created_at, 
         isProject: true, 
         uniqueId: 'pj_' + p.id, 
-        // 传递原始字段以便 getEventStatus 使用
         recruit_status: p.recruit_status, 
         statusClass: getEventStatus({...p, isProject: true}).class, 
         statusText: getEventStatus({...p, isProject: true}).text 
@@ -245,6 +265,7 @@ const fetchData = async () => {
       combined = [...combined, ...projectsMapped] 
     }
 
+    // 按时间混合排序
     combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     mixedEvents.value = combined.slice(0, 6)
 
@@ -255,7 +276,7 @@ const fetchData = async () => {
 </script>
 
 <style scoped>
-/* 样式完全保留 */
+/* 保持原有样式，仅增加 sale-info 相关样式 */
 .home-container { max-width: 1200px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', sans-serif; color: #333; }
 .hero-search-section { margin-bottom: 30px; display: flex; flex-direction: column; align-items: center; gap: 15px; }
 .search-wrap { display: flex; width: 100%; max-width: 700px; box-shadow: 0 8px 25px rgba(57, 197, 187, 0.15); border-radius: 40px; background: white; padding: 5px; border: 2px solid #e0f2f1; transition: 0.3s; }
@@ -314,4 +335,20 @@ const fetchData = async () => {
 .status-badge.upcoming { background: #fff3e0; color: #ef6c00; }
 .status-badge.ended { background: #eee; color: #999; }
 .loading-skel { text-align: center; color: #999; padding: 20px; }
+
+/* 🌟 新增样式：发售信息文本区 */
+.item-sale-info {
+  font-size: 11px;
+  color: #666;
+  white-space: pre-wrap; /* 保留换行 */
+  background: #fafafa;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid #eee;
+  margin-top: 4px;
+  line-height: 1.4;
+  max-height: 60px; /* 防止太长 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 </style>

@@ -13,14 +13,16 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "@supabase/supabase-js": "^2.87.1",
+    "@supabase/supabase-js": "^2.89.0",
     "axios": "^1.13.2",
     "axios-cookiejar-support": "^6.0.5",
     "cheerio": "^1.1.2",
     "dotenv": "^17.2.3",
+    "https-proxy-agent": "^7.0.6",
     "lucide-vue-next": "^0.561.0",
     "pinia": "^3.0.4",
     "tough-cookie": "^6.0.0",
+    "undici": "^7.16.0",
     "vue": "^3.5.25",
     "vue-router": "^4.6.4",
     "xlsx": "^0.18.5"

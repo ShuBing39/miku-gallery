@@ -1,13 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { supabase } from '../services/supabase' 
 
-// ✅ 1. 引入组件 (路径已修正为纯英文，请确保文件夹名与之一致)
-// 假设你已将 "AdminDash#后台" 改为 "AdminDash"，以此类推
-import HomeView from '../views/AdminDash/HomeView.vue'
+// ✅ 1. 引入组件
+// 注意：请确认 HomeView 到底在哪里，这里暂时保留你原来的路径
+import HomeView from '../views/AdminDash/HomeView.vue' 
+// 如果你的首页其实在 src/views/HomeView.vue，请自己改一下上面这行
+
 import LoginView from '../views/Auth/LoginView.vue'
 import RegisterView from '../views/Auth/RegisterView.vue'
 import RealNameVerify from '../views/Auth/RealNameVerify.vue'
 
+// 这里的路径对应你提供的结构
 import ItemDetail from '../views/Archive/ItemDetail.vue'
 import SubmitWork from '../views/Archive/SubmitWork.vue'
 
@@ -22,7 +25,6 @@ import ProjectDetail from '../views/Projects/ProjectDetail.vue'
 import SubmitProject from '../views/Projects/SubmitProject.vue'
 
 import EncyclopediaView from '../views/Encyclopedia/EncyclopediaList.vue'
-// 懒加载编辑页
 
 import TicketCenter from '../views/TicketCenter/TicketCenter.vue'
 import CircleCenter from '../views/Circle/CircleCenter.vue'
@@ -34,8 +36,7 @@ import GroupBuyTool from '../views/Group/GroupBuyTool.vue'
 
 // ✅ 2. 管理员邮箱白名单
 const ADMIN_EMAILS = [
-  '949058921@qq.com', // 替换为你的管理员邮箱
-  // 'admin2@example.com' 
+  '949058921@qq.com', 
 ]
 
 const router = createRouter({
@@ -50,22 +51,48 @@ const router = createRouter({
     { path: '/verify', name: 'verify', component: RealNameVerify, meta: { requiresAuth: true } },
     { path: '/profile', name: 'profile', component: UserDashboard, meta: { requiresAuth: true } },
 
-    // --- 周边库 (Archive) ---
-    // ⚠️ 修复了 .vue.vue 双后缀错误
-    { path: '/items', name: 'items', component: () => import('../views/Archive/GoodsWikiView.vue') }, 
-    { path: '/item/:id', name: 'item-detail', component: ItemDetail },
+    // --- 周边维基 (Wiki / Archive) ---
+    { 
+      path: '/wiki', 
+      name: 'wiki', 
+      component: () => import('../views/Archive/GoodsWikiView.vue') 
+    },
+    { path: '/items', redirect: '/wiki' }, 
+    
+    { path: '/wiki/item/:id', name: 'item-detail', component: ItemDetail },
+    
+    // 🔴 [核心修复] 使用函数式重定向，防止传递 ":id" 字符串
+    { 
+      path: '/item/:id', 
+      redirect: to => {
+        return { path: `/wiki/item/${to.params.id}` }
+      }
+    },
+    
     { path: '/submit', name: 'submit', component: SubmitWork, meta: { requiresAuth: true } },
+
+    // --- 葱葱百科 (Encyclopedia) ---
+    { 
+      path: '/encyclopedia', 
+      name: 'encyclopedia', 
+      component: EncyclopediaView 
+    },
+    { 
+      path: '/encyclopedia/new', 
+      name: 'wiki-new', 
+      component: () => import('../views/Encyclopedia/EncyclopediaEdit.vue') 
+    },
+    { 
+      path: '/encyclopedia/:id/edit', 
+      name: 'wiki-edit', 
+      component: () => import('../views/Encyclopedia/EncyclopediaEdit.vue') 
+    },
 
     // --- 活动 (Events) ---
     { path: '/events', name: 'events', component: EventsView },
     { path: '/event/:id', name: 'event-detail', component: EventDetail },
-    
-    // --- 百科 (Encyclopedia) ---
-    { path: '/wiki', name: 'wiki', component: EncyclopediaView },
-    { path: '/wiki/new', name: 'wiki-new', component: () => import('../views/Encyclopedia/EncyclopediaEdit.vue') },
-    { path: '/wiki/:id/edit', name: 'wiki-edit', component: () => import('../views/Encyclopedia/EncyclopediaEdit.vue') },
 
-    // --- 票务 & 社团 (Ticket & Circle) ---
+    // --- 票务 & 社团 ---
     { path: '/tickets', name: 'tickets', component: TicketCenter },
     { path: '/circles', name: 'circles', component: CircleCenter },
     
@@ -85,7 +112,6 @@ const router = createRouter({
       path: '/admin', 
       name: 'admin', 
       component: AdminDashboard, 
-      // ✅ 加上权限标记
       meta: { requiresAuth: true, requiresAdmin: true } 
     }
   ],
@@ -94,11 +120,10 @@ const router = createRouter({
   }
 })
 
-// ✅ 3. 路由守卫 (包含管理员检查)
+// ✅ 3. 路由守卫
 router.beforeEach(async (to, from, next) => {
   const { data: { session }, error } = await supabase.auth.getSession()
 
-  // Token 异常处理
   if (error) {
     await supabase.auth.signOut()
     return next('/login')
@@ -106,16 +131,14 @@ router.beforeEach(async (to, from, next) => {
 
   const user = session?.user
 
-  // A. 检查是否需要登录
   if (to.meta.requiresAuth && !user) {
     return next('/login')
   }
 
-  // B. 检查是否需要管理员权限
   if (to.meta.requiresAdmin) {
     if (!user || !ADMIN_EMAILS.includes(user.email)) {
       alert('🚫 权限不足：只有管理员才能进入后台。')
-      return next('/') // 拒绝访问，跳回首页
+      return next('/')
     }
   }
 
