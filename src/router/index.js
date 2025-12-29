@@ -6,33 +6,33 @@ import { supabase } from '../services/supabase'
 import HomeView from '../views/AdminDash/HomeView.vue' 
 // 如果你的首页其实在 src/views/HomeView.vue，请自己改一下上面这行
 
-import LoginView from '../views/Auth/LoginView.vue'
-import RegisterView from '../views/Auth/RegisterView.vue'
-import RealNameVerify from '../views/Auth/RealNameVerify.vue'
+import LoginView from '../views/auth/LoginView.vue'
+import RegisterView from '../views/auth/RegisterView.vue'
+import RealNameVerify from '../views/auth/RealNameVerify.vue'
 
 // 这里的路径对应你提供的结构
-import ItemDetail from '../views/Archive/ItemDetail.vue'
-import SubmitWork from '../views/Archive/SubmitWork.vue'
+import ItemDetail from '../views/archive/ItemDetail.vue'
+import SubmitWork from '../views/archive/SubmitWork.vue'
 
-import EventsView from '../views/Events/EventList.vue'
-import EventDetail from '../views/Events/EventDetail.vue'
+import EventsView from '../views/events/EventList.vue'
+import EventDetail from '../views/events/EventDetail.vue'
 
 import AdminDashboard from '../views/AdminDash/AdminDashboard.vue'
 import UserDashboard from '../views/AdminDash/UserDashboard.vue'
 
-import ProjectsView from '../views/Projects/ProjectsList.vue'
-import ProjectDetail from '../views/Projects/ProjectDetail.vue'
-import SubmitProject from '../views/Projects/SubmitProject.vue'
+import ProjectsView from '../views/projects/ProjectsList.vue'
+import ProjectDetail from '../views/projects/ProjectDetail.vue'
+import SubmitProject from '../views/projects/SubmitProject.vue'
 
-import EncyclopediaView from '../views/Encyclopedia/EncyclopediaList.vue'
+import EncyclopediaView from '../views/encyclopedia/EncyclopediaList.vue'
 
 import TicketCenter from '../views/TicketCenter/TicketCenter.vue'
-import CircleCenter from '../views/Circle/CircleCenter.vue'
+import CircleCenter from '../views/circle/CircleCenter.vue'
 
-import GroupBuyLobby from '../views/Group/GroupBuyLobby.vue'
-import GroupBuyDetail from '../views/Group/GroupBuyDetail.vue'
-import SubmitGroupBuy from '../views/Group/SubmitGroupBuy.vue'
-import GroupBuyTool from '../views/Group/GroupBuyTool.vue'
+import GroupBuyLobby from '../views/group/GroupBuyLobby.vue'
+import GroupBuyDetail from '../views/group/GroupBuyDetail.vue'
+import SubmitGroupBuy from '../views/group/SubmitGroupBuy.vue'
+import GroupBuyTool from '../views/group/GroupBuyTool.vue'
 
 // ✅ 2. 管理员邮箱白名单
 const ADMIN_EMAILS = [
@@ -55,7 +55,7 @@ const router = createRouter({
     { 
       path: '/wiki', 
       name: 'wiki', 
-      component: () => import('../views/Archive/GoodsWikiView.vue') 
+      component: () => import('../views/archive/GoodsWikiView.vue') 
     },
     { path: '/items', redirect: '/wiki' }, 
     
@@ -80,12 +80,12 @@ const router = createRouter({
     { 
       path: '/encyclopedia/new', 
       name: 'wiki-new', 
-      component: () => import('../views/Encyclopedia/EncyclopediaEdit.vue') 
+      component: () => import('../views/encyclopedia/EncyclopediaEdit.vue') 
     },
     { 
       path: '/encyclopedia/:id/edit', 
       name: 'wiki-edit', 
-      component: () => import('../views/Encyclopedia/EncyclopediaEdit.vue') 
+      component: () => import('../views/encyclopedia/EncyclopediaEdit.vue') 
     },
 
     // --- 活动 (Events) ---
