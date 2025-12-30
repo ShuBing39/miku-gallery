@@ -95,6 +95,7 @@ import { useRouter } from 'vue-router'
 // ✅ 修正路径：../../
 import { getEvents } from '../../services/eventData'
 import { useUserStore } from '../../stores/userStore'
+import { STANDARD_EVENTS } from '../../constants'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -103,12 +104,13 @@ const loading = ref(true)
 const currentCategory = ref('all')
 const hideEnded = ref(false) 
 
+// 基于 STANDARD_EVENTS 动态生成分类数组
 const categories = [
-  { id: 'all', name: 'ALL' },
-  { id: 'concert', name: 'MAGICAL MIRAI' },
-  { id: 'snow', name: 'SNOW MIKU' },
-  { id: 'expo', name: 'MIKU EXPO' },
-  { id: 'other', name: 'OTHERS' }
+  { id: 'all', name: '全部' },
+  ...Object.values(STANDARD_EVENTS).map(name => ({
+    id: name,
+    name: name
+  }))
 ]
 
 const isAdmin = computed(() => !!userStore.user)
@@ -133,11 +135,10 @@ const filteredEvents = computed(() => {
 
   // 1. 先过滤分类
   if (currentCategory.value !== 'all') {
+    const selectedCategoryName = currentCategory.value
     result = result.filter(e => {
-      if (currentCategory.value === 'concert') return e.title.includes('マジカルミライ') || e.title.includes('魔法未来')
-      if (currentCategory.value === 'snow') return e.title.includes('雪ミク') || e.title.includes('Snow Miku')
-      if (currentCategory.value === 'expo') return e.title.includes('EXPO')
-      return true // other 暂不细分
+      // 根据 event.title 是否包含选中的分类名称来进行筛选
+      return e.title && e.title.includes(selectedCategoryName)
     })
   }
 

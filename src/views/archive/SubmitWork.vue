@@ -62,10 +62,7 @@
             <label>分类 (选填)</label>
              <select v-model="productForm.category">
                <option value="">请选择(可选)</option>
-               <option value="手办/模型">手办/模型</option>
-               <option value="CD/专辑">CD/专辑</option>
-               <option value="服饰/挂件">服饰/挂件</option>
-               <option value="其他周边">其他周边</option>
+               <option v-for="cat in MERCH_CATEGORIES" :key="cat" :value="cat">{{ cat }}</option>
              </select>
           </div>
 
@@ -131,23 +128,11 @@
 
             <div class="form-group highlight-group">
               <label class="big-label">📅 来自哪场活动？<span class="required">*</span></label>
-              <select v-model="dojinQuickForm.event_id" required class="big-select" @change="handleEventSelection">
-                <option value="" disabled selected>请选择 (已加载标准活动库)</option>
-                <optgroup v-for="(group, year) in groupedEvents" :key="year" :label="year + '年活动'">
-                  <option v-for="ev in group" :key="ev.id" :value="ev.id">{{ ev.name }}</option>
-                </optgroup>
+              <select v-model="dojinQuickForm.event_id" required class="big-select">
+                <option value="" disabled selected>请选择活动</option>
+                <option v-for="ev in OFFICIAL_EVENT_CATEGORIES" :key="ev" :value="ev">{{ ev }}</option>
                 <option value="unknown">❓ 忘记了 / 待认领活动</option>
               </select>
-
-              <div v-if="availableLocations.length > 0" class="location-picker fade-in">
-                <label class="sub-label">📍 具体是哪一场？(多选)</label>
-                <div class="checkbox-group">
-                  <label v-for="loc in availableLocations" :key="loc" class="check-box-pill">
-                    <input type="checkbox" :value="loc" v-model="dojinQuickForm.selected_locations"> 
-                    {{ loc }}
-                  </label>
-                </div>
-              </div>
             </div>
 
             <div v-if="quickRole === 'creator'" class="form-group">
@@ -192,9 +177,9 @@
             <div class="form-group">
                <label>周边类型</label>
                <select v-model="dojinQuickForm.category">
-                 <option value="同人制品" disabled>请选择类型</option>
-                 <option v-for="cat in merchCategories" :key="cat.id" :value="cat.name">
-                   {{ cat.name }}
+                 <option value="" disabled>请选择类型</option>
+                 <option v-for="cat in MERCH_CATEGORIES" :key="cat" :value="cat">
+                   {{ cat }}
                  </option>
                </select>
             </div>
@@ -223,11 +208,7 @@
           <div class="form-group">
              <label>作品类型</label>
              <select v-model="workForm.type">
-               <option value="illustration">插画/漫画</option>
-               <option value="music">原创音乐/翻调</option>
-               <option value="video">视频/PV</option>
-               <option value="cosplay">Cosplay</option>
-               <option value="other">其他</option>
+               <option v-for="type in FAN_WORK_TYPES" :key="type" :value="type">{{ type }}</option>
              </select>
           </div>
            <div class="form-group">
@@ -259,11 +240,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../../stores/userStore'
 import { supabase } from '../../services/supabase'
 import { uploadImage } from '../../services/storage'
+import { MERCH_CATEGORIES, FAN_WORK_TYPES, OFFICIAL_EVENT_CATEGORIES } from '../../constants/index.js'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -278,15 +260,8 @@ const quickRole = ref('creator')
 const searchResults = ref([])
 let searchTimeout = null
 
-// 状态：字典数据
-const merchCategories = ref([]) 
-
-// 状态：活动数据
-const rawEventList = ref([]) 
-const availableLocations = ref([]) 
-
 // 表单数据：同人音像
-const workForm = reactive({ title: '', type: 'illustration', link_url: '', creator_name: '', description: '' })
+const workForm = reactive({ title: '', type: FAN_WORK_TYPES[0], link_url: '', creator_name: '', description: '' })
 const workFile = ref(null); const workPreview = ref('')
 
 // 表单数据：官方制品 (✅ 新增 is_blind_box 和 is_collection)
@@ -304,52 +279,10 @@ const dojinQuickForm = reactive({
   event_id: '', 
   creator_input: '', 
   name: '', 
-  category: '同人制品', 
-  selected_locations: [] 
+  category: MERCH_CATEGORIES[0] || ''
 })
 const dojinQuickFile = ref(null)
 const dojinQuickPreview = ref('')
-
-onMounted(async () => {
-  await Promise.all([
-    loadEventOptions(),
-    loadMerchCategories()
-  ])
-})
-
-// 加载活动列表
-const loadEventOptions = async () => {
-  const { data } = await supabase.from('standard_events').select('*').eq('is_active', true).order('year', { ascending: false }) 
-  if (data) rawEventList.value = data
-}
-
-// 加载周边类型字典
-const loadMerchCategories = async () => {
-  const { data } = await supabase.from('merch_categories').select('*').order('sort_order', { ascending: true })
-  if (data && data.length > 0) {
-    merchCategories.value = data
-    dojinQuickForm.category = data[0].name 
-  }
-}
-
-const groupedEvents = computed(() => {
-  const groups = {}
-  rawEventList.value.forEach(ev => {
-    const y = ev.year || '其他年份'
-    if (!groups[y]) groups[y] = []
-    groups[y].push(ev)
-  })
-  return groups
-})
-
-const handleEventSelection = () => {
-  const eventId = dojinQuickForm.event_id
-  dojinQuickForm.selected_locations = [] 
-  availableLocations.value = [] 
-  if (!eventId || eventId === 'unknown') return
-  const selectedEvent = rawEventList.value.find(e => e.id === eventId)
-  if (selectedEvent?.locations) availableLocations.value = selectedEvent.locations
-}
 
 const handleCreatorSearch = (e) => {
   const query = e.target.value.trim()
@@ -425,10 +358,6 @@ const handleSubmitDojinQuick = () => {
     if (!dojinQuickForm.event_id) return alert('请选择来源活动 📅')
 
     let finalDesc = dojinQuickForm.name || '同人无料'
-    
-    if (dojinQuickForm.selected_locations.length > 0) {
-      finalDesc += `\n📍 参展场次: ${dojinQuickForm.selected_locations.join(', ')}`
-    }
 
     const payload = {
       category: dojinQuickForm.category,

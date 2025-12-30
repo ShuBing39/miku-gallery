@@ -103,6 +103,7 @@ const router = createRouter({
 
     // --- 团购 (Group) ---
     { path: '/group-buys', name: 'group-buys', component: GroupBuyLobby },
+    { path: '/group-buy-lobby', name: 'group-buy-lobby', component: GroupBuyLobby },
     { path: '/group-buy/:id', name: 'group-buy-detail', component: GroupBuyDetail }, 
     { path: '/submit-group-buy', name: 'submit-group-buy', component: SubmitGroupBuy, meta: { requiresAuth: true } },
     { path: '/group-buy-tool', name: 'group-buy-tool', component: GroupBuyTool, meta: { requiresAuth: true } },

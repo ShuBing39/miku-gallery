@@ -9,23 +9,26 @@ const EXCLUDE_CATS = [
   '企划'
 ]
 
-// ✅ 1. 按月份获取数据 (已修复：改为获取所有字段，包括 price_jpy 和 cover_image_url)
+// ✅ 1. 按月份获取数据 (已修复：简化过滤逻辑，只查询 status 为 approved 的数据)
 export const fetchWikiByMonth = async (year, month) => {
-  const startStr = `${year}-${month}-01`
+  const startStr = `${year}-${month.toString().padStart(2, '0')}-01`
   // 计算下个月1号
   const nextMonthDate = new Date(year, month, 1) 
-  const nextMonthStr = nextMonthDate.toISOString()
+  const nextMonthStr = nextMonthDate.toISOString().split('T')[0]
 
-  // 📝 修改点：这里改成了 select('*')
+  // 📝 修改点：移除复杂的 category 过滤，只查询 status 为 approved 的数据
+  // 显式指定存在的字段：id, name, image_url, release_date, category, status
   const { data, error } = await supabase.from('items')
-    .select('*') 
+    .select('id, name, image_url, release_date, category, status') 
     .eq('status', 'approved')
-    .not('category', 'in', `(${EXCLUDE_CATS.map(c=>`"${c}"`).join(',')})`)
     .gte('release_date', startStr)
     .lt('release_date', nextMonthStr)
     .order('release_date', { ascending: false })
 
-  if (error) throw error
+  if (error) {
+    console.error('fetchWikiByMonth 错误:', error)
+    throw error
+  }
   return data || []
 }
 
@@ -48,16 +51,15 @@ export const toggleSubscription = async (wikiId, userId) => {
   }
 }
 
-// ✅ 4. 搜索数据 (已修复：改为获取所有字段)
+// ✅ 4. 搜索数据 (已修复：简化过滤逻辑，只查询 status 为 approved 的数据)
 export const searchWiki = async (keyword) => {
   const rawQ = keyword.trim()
   if (!rawQ) return []
 
-  // 📝 修改点：这里也改成了 select('*')
+  // 📝 修改点：移除复杂的 category 过滤，显式指定存在的字段
   let query = supabase.from('items')
-    .select('*')
+    .select('id, name, image_url, release_date, category, status')
     .eq('status', 'approved')
-    .not('category', 'in', `(${EXCLUDE_CATS.map(c=>`"${c}"`).join(',')})`)
 
   // 昵称映射表
   const nicknameMap = { '葱': '初音未来', 'miku': '初音未来', '初音': '初音未来', '橘': '镜音铃', '蕉': '镜音连', '双子': '镜音双子', '章鱼': '巡音流歌', '大哥': 'KAITO', '大姐': 'MEIKO' }
@@ -76,24 +78,23 @@ export const searchWiki = async (keyword) => {
     else if (/^\d+$/.test(key) && key.length < 4) { 
       query = query.eq('id', key) 
     }
-    // 搜昵称
-    else if (nicknameMap[lowerKey]) { 
-      query = query.ilike('character', `%${nicknameMap[lowerKey]}%`) 
-    }
     // 搜分类别名
     else if (categoryMap[lowerKey]) { 
       query = query.ilike('category', `%${categoryMap[lowerKey]}%`) 
     }
-    // 通用搜索
+    // 通用搜索（只搜索存在的字段：name 和 category）
     else { 
-      query = query.or(`name.ilike.%${key}%,category.ilike.%${key}%,author.ilike.%${key}%`) 
+      query = query.or(`name.ilike.%${key}%,category.ilike.%${key}%`) 
     }
   })
 
   query = query.order('release_date', { ascending: false, nullsFirst: false }).limit(50)
   
   const { data, error } = await query
-  if (error) throw error
+  if (error) {
+    console.error('searchWiki 错误:', error)
+    throw error
+  }
   return data || []
 }
 

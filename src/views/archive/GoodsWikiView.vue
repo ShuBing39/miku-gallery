@@ -56,11 +56,14 @@
         
         <select v-model="quickFilter" class="filter-select" @change="applyQuickFilter">
           <option value="" disabled selected>📂 筛选...</option>
-          <option value="手办">🗿 手办</option>
-          <option value="玩偶">🧸 玩偶</option>
-          <option value="衣服">👕 服饰</option>
-          <option value="徽章">📛 徽章</option>
-          <option value="2025">📅 2025</option>
+          <optgroup label="商品分类">
+            <option v-for="cat in MERCH_CATEGORIES" :key="cat" :value="cat">{{ cat }}</option>
+          </optgroup>
+          <optgroup label="年份">
+            <option value="2025">📅 2025</option>
+            <option value="2024">📅 2024</option>
+            <option value="2023">📅 2023</option>
+          </optgroup>
         </select>
 
         <router-link to="/submit" class="add-btn-toolbar">➕ 投稿/新增</router-link>
@@ -175,7 +178,8 @@ import { useUserStore } from '../../stores/userStore'
 import { fetchWikiByMonth, searchWiki } from '../../services/wikiData' 
 import WikiCard from '../../components/wiki/WikiCard.vue' 
 import { supabase } from '../../services/supabase'
-import { fixUrl } from '../../utils/formatters' 
+import { fixUrl } from '../../utils/formatters'
+import { MERCH_CATEGORIES } from '../../constants/index.js' 
 
 const userStore = useUserStore()
 const searchInput = ref('')
@@ -297,10 +301,18 @@ const fetchDataForYearMonth = async (yearGroup) => {
   yearGroup.isLoading = true
   try {
     const data = await fetchWikiByMonth(yearGroup.year, yearGroup.selectedMonth)
-    yearGroup.items = processItems(data)
+    // 过滤掉没有 release_date 的数据，或者给一个默认日期
+    const filteredData = data.filter(item => {
+      if (!item.release_date) {
+        console.warn(`商品 ID ${item.id} 缺少 release_date，已跳过`)
+        return false
+      }
+      return true
+    })
+    yearGroup.items = processItems(filteredData)
     yearGroup.hasLoaded = true
   } catch (e) {
-    console.error(e)
+    console.error('fetchDataForYearMonth 错误:', e)
   } finally {
     yearGroup.isLoading = false
   }

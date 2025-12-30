@@ -241,6 +241,227 @@ async function analyzeBlogWithGemini(title, htmlContent) {
   return [];
 }
 
+// === 🔍 检测是否为动态数据加载 ===
+function detectDynamicData($) {
+  const indicators = {
+    hasReact: false,
+    hasVue: false,
+    hasAngular: false,
+    hasFetch: false,
+    hasAxios: false,
+    hasXHR: false,
+    emptyContainers: 0,
+    dataAttributes: 0,
+    scriptCount: 0
+  };
+
+  // 1. 检测框架标识
+  const scripts = $('script').toArray();
+  indicators.scriptCount = scripts.length;
+  
+  scripts.forEach(script => {
+    const content = $(script).html() || '';
+    const src = $(script).attr('src') || '';
+    
+    if (content.includes('React') || src.includes('react')) indicators.hasReact = true;
+    if (content.includes('Vue') || src.includes('vue')) indicators.hasVue = true;
+    if (content.includes('angular') || src.includes('angular')) indicators.hasAngular = true;
+    if (content.includes('fetch(') || content.includes('axios') || content.includes('XMLHttpRequest')) {
+      indicators.hasFetch = true;
+    }
+    if (content.includes('axios') || src.includes('axios')) indicators.hasAxios = true;
+    if (content.includes('XMLHttpRequest') || content.includes('xhr')) indicators.hasXHR = true;
+  });
+
+  // 2. 检测空容器（可能是动态填充的）
+  $('div, section, article').each((i, el) => {
+    const text = $(el).text().trim();
+    const children = $(el).children().length;
+    if (children > 0 && text.length < 10) {
+      indicators.emptyContainers++;
+    }
+  });
+
+  // 3. 检测 data-* 属性中的 JSON 数据（可能是静态预加载）
+  // 注意：不能直接使用 [data-*] 选择器，需要遍历常见容器元素
+  $('div, section, article, span, a, button, input').each((i, el) => {
+    const attrs = el.attribs;
+    if (!attrs) return;
+    Object.keys(attrs).forEach(attr => {
+      if (attr.startsWith('data-')) {
+        const value = attrs[attr];
+        if (value && (value.startsWith('{') || value.startsWith('['))) {
+          indicators.dataAttributes++;
+        }
+      }
+    });
+  });
+
+  // 判断逻辑：如果有很多动态加载特征且没有静态数据属性，则可能是动态的
+  const dynamicScore = 
+    (indicators.hasReact ? 2 : 0) +
+    (indicators.hasVue ? 2 : 0) +
+    (indicators.hasAngular ? 2 : 0) +
+    (indicators.hasFetch ? 1 : 0) +
+    (indicators.hasAxios ? 1 : 0) +
+    (indicators.hasXHR ? 1 : 0) +
+    (indicators.emptyContainers > 5 ? 1 : 0);
+
+  const staticScore = indicators.dataAttributes;
+
+  return {
+    isDynamic: dynamicScore > 3 && staticScore < 2,
+    indicators,
+    dynamicScore,
+    staticScore
+  };
+}
+
+// === 📊 从 DOM 结构提取产品信息 ===
+function extractProductsFromDOM($, title) {
+  const products = [];
+  
+  // 尝试多种选择器模式来找到商品信息
+  const productSelectors = [
+    // 模式1: 列表项模式
+    'article .entry-content ul li',
+    'article .entry-content ol li',
+    '.entry-content .product-item',
+    '.entry-content .goods-item',
+    // 模式2: 段落模式（每个段落一个商品）
+    '.entry-content > p',
+    '.entry-content > div',
+    // 模式3: 表格模式
+    '.entry-content table tr',
+  ];
+
+  let foundItems = [];
+  
+  // 尝试每种选择器
+  for (const selector of productSelectors) {
+    const elements = $(selector);
+    if (elements.length > 0 && elements.length < 50) { // 避免选择到太多元素
+      foundItems = elements.toArray();
+      break;
+    }
+  }
+
+  // 如果没有找到特定结构，尝试从整个内容中提取
+  if (foundItems.length === 0) {
+    // 按段落或 div 分割
+    foundItems = $('.entry-content > p, .entry-content > div').toArray();
+  }
+
+  foundItems.forEach((element, index) => {
+    const $el = $(element);
+    const text = $el.text().trim();
+    
+    // 跳过太短或明显不是商品的内容
+    if (text.length < 10 || text.length > 500) return;
+    
+    // 提取商品名称（通常在链接文本、粗体、标题中）
+    let name = null;
+    const nameSelectors = ['a', 'strong', 'b', 'h3', 'h4', '.product-name', '.item-name'];
+    for (const sel of nameSelectors) {
+      const nameEl = $el.find(sel).first();
+      if (nameEl.length > 0) {
+        name = nameEl.text().trim();
+        if (name.length > 5 && name.length < 200) break;
+      }
+    }
+    if (!name) {
+      // 如果没有找到，尝试提取第一行或前50个字符
+      name = text.split('\n')[0].trim().substring(0, 100);
+    }
+
+    // 提取价格（查找包含 ¥ 或 円 的数字）
+    let price_jpy = 0;
+    const priceMatch = text.match(/(?:¥|円|JPY|jpy)[\s:：]*([\d,]+)/i) || 
+                       text.match(/([\d,]+)[\s]*(?:円|JPY|jpy)/i) ||
+                       text.match(/([\d,]+)[\s]*円/i);
+    if (priceMatch) {
+      price_jpy = parseInt(priceMatch[1].replace(/,/g, ''), 10) || 0;
+    }
+
+    // 提取链接
+    let purchase_url = null;
+    let link_type = 'none';
+    const linkEl = $el.find('a[href^="http"]').first();
+    if (linkEl.length > 0) {
+      purchase_url = linkEl.attr('href');
+      // 判断链接类型
+      if (purchase_url && (
+        purchase_url.includes('/pd/') ||
+        purchase_url.includes('/item/') ||
+        purchase_url.includes('/detail/') ||
+        purchase_url.includes('/product/') ||
+        purchase_url.match(/\/[A-Z0-9]{10,}/) // 包含长ID的URL
+      )) {
+        link_type = 'deep_link';
+      } else if (purchase_url) {
+        link_type = 'home_page';
+      }
+    }
+
+    // 提取制造商（通常在括号、冒号后，或特定关键词后）
+    let manufacturer = 'Unknown';
+    const manufacturerPatterns = [
+      /(?:メーカー|製造|発売)[：:]\s*([^\n、，]+)/i,
+      /（([^）]+)）/,
+      /\(([^)]+)\)/,
+      /【([^】]+)】/
+    ];
+    for (const pattern of manufacturerPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1].length < 50) {
+        manufacturer = match[1].trim();
+        break;
+      }
+    }
+
+    // 检测盲盒
+    const is_blind_box = /(?:ランダム|random|blind|box|全\d+種|トレーディング|trading)/i.test(text);
+
+    // 只添加有意义的商品（至少要有名称）
+    if (name && name.length > 3) {
+      products.push({
+        name: name,
+        price_jpy: price_jpy,
+        manufacturer: manufacturer,
+        purchase_url: purchase_url || null,
+        link_type: link_type,
+        is_blind_box: is_blind_box
+      });
+    }
+  });
+
+  // 如果没找到任何商品，尝试从标题和整个内容中提取一个
+  if (products.length === 0) {
+    const allLinks = $('.entry-content a[href^="http"]').toArray();
+    const allText = $('.entry-content').text();
+    
+    // 尝试从整个内容中提取价格
+    const globalPriceMatch = allText.match(/(?:¥|円|JPY)[\s:：]*([\d,]+)/i);
+    const globalPrice = globalPriceMatch ? parseInt(globalPriceMatch[1].replace(/,/g, ''), 10) : 0;
+    
+    // 使用第一个外部链接
+    const firstLink = allLinks.length > 0 ? $(allLinks[0]).attr('href') : null;
+    
+    if (title || firstLink) {
+      products.push({
+        name: title || '未知商品',
+        price_jpy: globalPrice,
+        manufacturer: 'Unknown',
+        purchase_url: firstLink,
+        link_type: firstLink ? (firstLink.includes('/pd/') || firstLink.includes('/item/') ? 'deep_link' : 'home_page') : 'none',
+        is_blind_box: /(?:ランダム|random|blind|box)/i.test(allText)
+      });
+    }
+  }
+
+  return products;
+}
+
 // === 🔗 辅助: 生成精准搜索链接 ===
 function generateSearchUrl(itemName) {
   if (!itemName) return null;
@@ -328,138 +549,228 @@ async function processArticle(link, title, pubDate, dryRun = false) {
     const contentHtml = $('.entry-content').html() || $('body').html(); 
     const blogCover = $('.entry-content img').first().attr('src') || null;
 
-    let aiItems = [];
-    const shouldUseAI = dryRun || isRecent(pubDate);
-
-    if (shouldUseAI) {
-        process.stdout.write(colors.yellow(`   🤖 正在调用 Gemini (1.5 Flash) 分析... `));
+    // === 🔍 第一步：检测是否为动态数据 ===
+    console.log(colors.blue(`   🔍 正在分析页面数据结构...`));
+    const dynamicCheck = detectDynamicData($);
+    
+    if (dynamicCheck.isDynamic) {
+      console.log(colors.yellow(`   ⚠️ 检测到动态数据加载 (动态分数: ${dynamicCheck.dynamicScore}, 静态分数: ${dynamicCheck.staticScore})`));
+      console.log(colors.gray(`   📊 检测详情:`));
+      console.log(colors.gray(`      - React: ${dynamicCheck.indicators.hasReact ? '是' : '否'}`));
+      console.log(colors.gray(`      - Vue: ${dynamicCheck.indicators.hasVue ? '是' : '否'}`));
+      console.log(colors.gray(`      - 动态请求: ${dynamicCheck.indicators.hasFetch || dynamicCheck.indicators.hasAxios || dynamicCheck.indicators.hasXHR ? '是' : '否'}`));
+      console.log(colors.gray(`      - 脚本数量: ${dynamicCheck.indicators.scriptCount}`));
+      console.log(colors.gray(`      - 空容器: ${dynamicCheck.indicators.emptyContainers}`));
+      console.log(colors.yellow(`   ⏭️  跳过 DOM 分析，使用 AI 分析或跳过处理`));
+      
+      // 动态数据时，如果文章较新或测试模式，使用 AI 分析
+      const shouldUseAI = dryRun || isRecent(pubDate);
+      let aiItems = [];
+      
+      if (shouldUseAI) {
+        process.stdout.write(colors.yellow(`   🤖 正在调用 Gemini 分析动态内容... `));
         aiItems = await analyzeBlogWithGemini(title, contentHtml);
         console.log(colors.green(`完成! 识别到 ${aiItems.length} 个商品`));
-    } else {
-        console.log(colors.gray(`   ⏳ 文章较旧，跳过 AI 分析。`));
-        aiItems = [{
-            name: title,
-            url: null,
-            link_type: 'none',
-            is_blind_box: false,
-            price_jpy: 0,
-            manufacturer: 'Unknown'
-        }];
-    }
-
-    if (dryRun) {
+      } else {
+        console.log(colors.gray(`   ⏳ 文章较旧且为动态数据，跳过处理。`));
+        return; // 直接返回，不处理
+      }
+      
+      // 继续后续处理逻辑（使用 aiItems）
+      if (dryRun) {
         console.log(colors.magenta("\n--- [🧪 AI 分析结果预览] ---"));
         console.log(JSON.stringify(aiItems, null, 2));
         
         console.log(colors.magenta("\n--- [🔗 链接处理模拟] ---"));
         for (const item of aiItems) {
-            let note = "";
-            let ogResult = "未抓取 (DryRun)";
-            let finalLink = item.url;
-            
-            if (item.link_type === 'deep_link') {
-                note = "✅ 直达链接 (尝试抓取 OG)";
-                const og = await fetchOGTags(item.url);
-                ogResult = og ? `📸 成功: ${og.substring(0,25)}...` : "❌ 无OG";
-            } else {
-                finalLink = generateSearchUrl(item.name);
-                note = `🔄 泛链接 (生成搜索: ${finalLink})`;
-            }
-            
-            console.log(`商品: ${item.name}`);
-            console.log(`   原始链接: ${item.url || '无'}`);
-            console.log(`   判定类型: ${item.link_type}`);
-            console.log(`   处理结果: ${note}`);
-            console.log(`   OG图测试: ${ogResult}`);
-            console.log("-----------------------------------");
+          let note = "";
+          let ogResult = "未抓取 (DryRun)";
+          let finalLink = item.purchase_url || item.url;
+          
+          if ((item.link_type === 'deep_link' || item.purchase_url) && finalLink) {
+            note = "✅ 直达链接 (尝试抓取 OG)";
+            const og = await fetchOGTags(finalLink);
+            ogResult = og ? `📸 成功: ${og.substring(0,25)}...` : "❌ 无OG";
+          } else {
+            finalLink = generateSearchUrl(item.name);
+            note = `🔄 泛链接 (生成搜索: ${finalLink})`;
+          }
+          
+          console.log(`商品: ${item.name}`);
+          console.log(`   原始链接: ${item.purchase_url || item.url || '无'}`);
+          console.log(`   判定类型: ${item.link_type}`);
+          console.log(`   处理结果: ${note}`);
+          console.log(`   OG图测试: ${ogResult}`);
+          console.log("-----------------------------------");
         }
         return;
+      }
+      
+      // 生产模式处理（使用 aiItems）
+      await processItemsForProduction(aiItems, title, pubDate, blogCover, link, dryRun);
+      return;
     }
 
-    // --- 🚀 生产模式入库逻辑 ---
-    const isCollection = shouldUseAI && aiItems.length > 1;
+    // === 📊 第二步：静态数据，使用 DOM 分析 ===
+    console.log(colors.green(`   ✅ 检测到静态数据 (动态分数: ${dynamicCheck.dynamicScore}, 静态分数: ${dynamicCheck.staticScore})`));
+    console.log(colors.blue(`   📊 正在从 DOM 结构提取商品信息...`));
     
-    const mainData = {
-        name: isCollection ? `${title} (合集)` : (aiItems[0]?.name || title),
-        category: '情报',
-        image_url: JSON.stringify([blogCover]),
-        cover_image_url: blogCover,
-        release_date: pubDate || FALLBACK_DATE,
-        purchase_link: link, 
-        is_collection: isCollection,
-        is_fan_work: false,
-        status: 'approved',
-        link_url: null 
-    };
+    let domItems = extractProductsFromDOM($, title);
+    console.log(colors.green(`   ✅ DOM 分析完成! 识别到 ${domItems.length} 个商品`));
+    
+    if (domItems.length === 0) {
+      console.log(colors.yellow(`   ⚠️ DOM 分析未找到商品，尝试使用 AI 分析...`));
+      const shouldUseAI = dryRun || isRecent(pubDate);
+      if (shouldUseAI) {
+        process.stdout.write(colors.yellow(`   🤖 正在调用 Gemini 分析... `));
+        domItems = await analyzeBlogWithGemini(title, contentHtml);
+        console.log(colors.green(`完成! 识别到 ${domItems.length} 个商品`));
+      } else {
+        console.log(colors.gray(`   ⏳ 文章较旧，跳过 AI 分析。`));
+        domItems = [{
+          name: title,
+          purchase_url: null,
+          url: null,
+          link_type: 'none',
+          is_blind_box: false,
+          price_jpy: 0,
+          manufacturer: 'Unknown'
+        }];
+      }
+    }
 
-    if (!isCollection && aiItems.length === 1) {
-        const item = aiItems[0];
-        mainData.price_jpy = item.price_jpy;
-        mainData.manufacturer = item.manufacturer;
-        mainData.is_blind_box = item.is_blind_box;
+    // 统一字段名（兼容 AI 返回的格式）
+    const aiItems = domItems.map(item => ({
+      name: item.name,
+      price_jpy: item.price_jpy || 0,
+      manufacturer: item.manufacturer || 'Unknown',
+      url: item.purchase_url || item.url || null,
+      purchase_url: item.purchase_url || item.url || null,
+      link_type: item.link_type || 'none',
+      is_blind_box: item.is_blind_box || false
+    }));
+
+    // 处理结果（测试模式或生产模式）
+    if (dryRun) {
+      console.log(colors.magenta("\n--- [🧪 DOM/AI 分析结果预览] ---"));
+      console.log(JSON.stringify(aiItems, null, 2));
+      
+      console.log(colors.magenta("\n--- [🔗 链接处理模拟] ---"));
+      for (const item of aiItems) {
+        let note = "";
+        let ogResult = "未抓取 (DryRun)";
+        let finalLink = item.purchase_url || item.url;
         
-        if (item.link_type === 'deep_link') {
-            mainData.link_url = item.url;
-            const ogImg = await fetchOGTags(item.url);
-            if (ogImg) {
-                mainData.cover_image_url = ogImg;
-                mainData.image_url = JSON.stringify([ogImg]);
-            }
+        if ((item.link_type === 'deep_link' || item.purchase_url) && finalLink) {
+          note = "✅ 直达链接 (尝试抓取 OG)";
+          const og = await fetchOGTags(finalLink);
+          ogResult = og ? `📸 成功: ${og.substring(0,25)}...` : "❌ 无OG";
         } else {
-            mainData.link_url = generateSearchUrl(item.name || title);
+          finalLink = generateSearchUrl(item.name);
+          note = `🔄 泛链接 (生成搜索: ${finalLink})`;
         }
+        
+        console.log(`商品: ${item.name}`);
+        console.log(`   原始链接: ${item.purchase_url || item.url || '无'}`);
+        console.log(`   判定类型: ${item.link_type}`);
+        console.log(`   处理结果: ${note}`);
+        console.log(`   OG图测试: ${ogResult}`);
+        console.log("-----------------------------------");
+      }
+      return;
     }
 
-    const { data: parentRecord, error: parentError } = await supabase
-        .from(TABLE_NAME)
-        .upsert(mainData, { onConflict: 'purchase_link' }) 
-        .select()
-        .single();
-
-    if (parentError) throw parentError;
-    console.log(colors.green(`   ✅ 主记录已存入 (ID: ${parentRecord.id})`));
-
-    if (isCollection) {
-        await supabase.from(TABLE_NAME).delete().eq('parent_id', parentRecord.id);
-        for (const item of aiItems) {
-            let childImg = blogCover;
-            let childLink = item.url;
-
-            if (item.link_type === 'deep_link') {
-                const ogImg = await fetchOGTags(item.url);
-                if (ogImg) childImg = ogImg;
-            } else {
-                childLink = generateSearchUrl(item.name);
-            }
-
-            const childData = {
-                parent_id: parentRecord.id,
-                name: item.name,
-                price_jpy: item.price_jpy,
-                manufacturer: item.manufacturer,
-                is_blind_box: item.is_blind_box,
-                cover_image_url: childImg,
-                image_url: JSON.stringify([childImg]),
-                link_url: childLink,
-                is_collection: false,
-                is_fan_work: false,
-                status: 'approved',
-                release_date: pubDate
-            };
-            await supabase.from(TABLE_NAME).insert(childData);
-        }
-        console.log(colors.cyan(`   ✨ 已挂载 ${aiItems.length} 个子商品`));
-    }
+    // 生产模式处理
+    await processItemsForProduction(aiItems, title, pubDate, blogCover, link, dryRun);
 
   } catch (e) {
     console.error(colors.red(`   ❌ 处理出错: ${e.message}`));
   }
 }
 
+// === 🚀 生产模式入库逻辑（统一处理函数）===
+async function processItemsForProduction(aiItems, title, pubDate, blogCover, link, dryRun = false) {
+  const isCollection = aiItems.length > 1;
+  
+  const mainData = {
+    name: isCollection ? `${title} (合集)` : (aiItems[0]?.name || title),
+    category: '情报',
+    image_url: JSON.stringify([blogCover]),
+    cover_image_url: blogCover,
+    release_date: pubDate || FALLBACK_DATE,
+    purchase_link: link, 
+    is_collection: isCollection,
+    is_fan_work: false,
+    status: 'approved',
+    link_url: null 
+  };
+
+  if (!isCollection && aiItems.length === 1) {
+    const item = aiItems[0];
+    mainData.price_jpy = item.price_jpy || 0;
+    mainData.manufacturer = item.manufacturer || 'Unknown';
+    mainData.is_blind_box = item.is_blind_box || false;
+    
+    const itemUrl = item.purchase_url || item.url;
+    if (item.link_type === 'deep_link' && itemUrl) {
+      mainData.link_url = itemUrl;
+      const ogImg = await fetchOGTags(itemUrl);
+      if (ogImg) {
+        mainData.cover_image_url = ogImg;
+        mainData.image_url = JSON.stringify([ogImg]);
+      }
+    } else {
+      mainData.link_url = generateSearchUrl(item.name || title);
+    }
+  }
+
+  const { data: parentRecord, error: parentError } = await supabase
+    .from(TABLE_NAME)
+    .upsert(mainData, { onConflict: 'purchase_link' }) 
+    .select()
+    .single();
+
+  if (parentError) throw parentError;
+  console.log(colors.green(`   ✅ 主记录已存入 (ID: ${parentRecord.id})`));
+
+  if (isCollection) {
+    await supabase.from(TABLE_NAME).delete().eq('parent_id', parentRecord.id);
+    for (const item of aiItems) {
+      let childImg = blogCover;
+      const itemUrl = item.purchase_url || item.url;
+      let childLink = itemUrl;
+
+      if (item.link_type === 'deep_link' && itemUrl) {
+        const ogImg = await fetchOGTags(itemUrl);
+        if (ogImg) childImg = ogImg;
+      } else {
+        childLink = generateSearchUrl(item.name);
+      }
+
+      const childData = {
+        parent_id: parentRecord.id,
+        name: item.name,
+        price_jpy: item.price_jpy || 0,
+        manufacturer: item.manufacturer || 'Unknown',
+        is_blind_box: item.is_blind_box || false,
+        cover_image_url: childImg,
+        image_url: JSON.stringify([childImg]),
+        link_url: childLink,
+        is_collection: false,
+        is_fan_work: false,
+        status: 'approved',
+        release_date: pubDate
+      };
+      await supabase.from(TABLE_NAME).insert(childData);
+    }
+    console.log(colors.cyan(`   ✨ 已挂载 ${aiItems.length} 个子商品`));
+  }
+}
+
 // === 🎮 交互式入口 ===
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
-console.log(colors.cyan("\n🤖 葱葱维基爬虫 V17.0 (Gemini 1.5 Flash + 依赖清理提示)"));
+console.log(colors.cyan("\n🤖 葱葱维基爬虫 V18.0 (DOM 智能分析 + 动态数据检测)"));
 console.log("------------------------------------------------");
 console.log("[1] 🧪 测试模式");
 console.log("[2] 🚀 生产模式");

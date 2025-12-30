@@ -53,6 +53,11 @@
           <button v-for="type in ITEM_TYPES" :key="type.key" 
             class="brush-btn" 
             :class="[type.key, { active: activeBrush === type.key }]"
+            :style="activeBrush === type.key && type.color ? { 
+              color: type.color, 
+              borderColor: type.color,
+              backgroundColor: getActiveBgColor(type.color)
+            } : {}"
             @click="activeBrush = type.key"
             :title="type.desc"
           >
@@ -66,6 +71,7 @@
         <div v-for="(item, index) in data.items" :key="index" 
           class="list-item" 
           :class="[item.type, { 'is-blind': item.is_blind_box }]"
+          :style="getItemStyle(item.type)"
           @click="applyBrush(index)"
         >
           <div class="img-wrap">
@@ -171,6 +177,7 @@
 import { ref, reactive, watch } from 'vue'
 import { supabase } from '../../services/supabase' 
 import { scrapeOfficialSite } from '../../services/scraperService'
+import { ITEM_SALES_TAGS } from '../../constants'
 
 const props = defineProps(['data'])
 const emit = defineEmits(['next', 'prev', 'update:data'])
@@ -200,13 +207,7 @@ watch(() => manualForm.is_blind_box, (val) => {
   if (!val) manualForm.auto_v6 = false
 })
 
-const ITEM_TYPES = [
-{ key: 'hot', label: '热门', icon: '🔥', desc: '需捆绑/竞价' },
-{ key: 'normal', label: '普通', icon: '✨', desc: '正常售卖' },
-{ key: 'cold', label: '调价', icon: '❄️', desc: '被捆绑/降价' },
-{ key: 'hidden', label: '隐藏', icon: '🕵️', desc: '特殊分配' },
-{ key: 'bonus', label: '特典', icon: '🎁', desc: '满赠/分配' }
-]
+const ITEM_TYPES = Object.values(ITEM_SALES_TAGS)
 
 // 📚 搜索库内 (新增 from_library 标记)
 const searchLibrary = async () => {
@@ -352,6 +353,28 @@ const confirmManualAdd = () => {
 const removeItem = (idx) => props.data.items.splice(idx, 1)
 const applyBrush = (idx) => props.data.items[idx].type = activeBrush.value
 const getLabel = (key) => ITEM_TYPES.find(t => t.key === key)?.label
+
+// 根据颜色生成浅色背景
+const getActiveBgColor = (color) => {
+  if (!color) return 'white'
+  // 将颜色转换为 rgba，降低透明度作为背景
+  const hex = color.replace('#', '')
+  const r = parseInt(hex.substr(0, 2), 16)
+  const g = parseInt(hex.substr(2, 2), 16)
+  const b = parseInt(hex.substr(4, 2), 16)
+  return `rgba(${r}, ${g}, ${b}, 0.1)`
+}
+
+// 根据类型获取列表项样式
+const getItemStyle = (type) => {
+  const tag = ITEM_TYPES.find(t => t.key === type)
+  if (!tag || !tag.color) return {}
+  return {
+    borderLeftColor: tag.color,
+    backgroundColor: getActiveBgColor(tag.color)
+  }
+}
+
 const validateAndNext = () => {
   if (props.data.items.length === 0) return alert('请至少添加一件商品')
   emit('next')
@@ -395,17 +418,22 @@ h3 { margin: 0 0 5px 0; color: #333; font-weight: 700; }
 .brush-group { display: flex; gap: 5px; }
 .brush-btn { border: 1px solid #e0e0e0; background: white; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
 .brush-btn.active { transform: scale(1.05); font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-.brush-btn.hot.active { background: #ffebee; color: #d32f2f; border-color: #ef5350; }
-.brush-btn.normal.active { background: #e3f2fd; color: #1976d2; border-color: #42a5f5; }
-.brush-btn.cold.active { background: #e0f7fa; color: #006064; border-color: #26c6da; }
+.brush-btn.hot.active { background: #ffebee; color: #f44336; border-color: #f44336; }
+.brush-btn.normal.active { background: #e3f2fd; color: #2196f3; border-color: #2196f3; }
+.brush-btn.cold.active { background: #e0f7fa; color: #00bcd4; border-color: #00bcd4; }
+.brush-btn.hidden.active { background: #f3e5f5; color: #9c27b0; border-color: #9c27b0; }
+.brush-btn.bonus.active { background: #fff3e0; color: #ff9800; border-color: #ff9800; }
 .tip { font-size: 11px; color: #999; margin-left: auto; }
 
 /* List */
 .items-list { display: flex; flex-direction: column; gap: 12px; }
 .list-item { display: flex; gap: 12px; padding: 12px; background: white; border: 1px solid #eee; border-radius: 10px; align-items: center; cursor: pointer; }
 .list-item:hover { border-color: #39C5BB; }
-.list-item.hot { border-left: 4px solid #ef5350; background: #fffbfb; }
-.list-item.cold { border-left: 4px solid #26c6da; background: #f0ffff; }
+.list-item.hot { border-left: 4px solid #f44336; background: #fffbfb; }
+.list-item.normal { border-left: 4px solid #2196f3; background: #f5f9ff; }
+.list-item.cold { border-left: 4px solid #00bcd4; background: #f0ffff; }
+.list-item.hidden { border-left: 4px solid #9c27b0; background: #faf5ff; }
+.list-item.bonus { border-left: 4px solid #ff9800; background: #fffbf5; }
 
 .img-wrap { position: relative; width: 56px; height: 56px; }
 .item-thumb { width: 100%; height: 100%; border-radius: 6px; object-fit: cover; }
@@ -416,7 +444,7 @@ h3 { margin: 0 0 5px 0; color: #333; font-weight: 700; }
 .item-meta { display: flex; gap: 10px; font-size: 12px; margin-top: 4px; }
 .price { color: #f57c00; } 
 .price-num { font-weight: bold; font-size: 15px; }
-.type-badge { background: #f0f0f0; padding: 2px 6px; border-radius: 4px; color: #666; }
+.type-badge { background: #f0f0f0; padding: 2px 6px; border-radius: 4px; color: #666; font-size: 11px; }
 
 .item-actions { display: flex; gap: 12px; align-items: center; }
 .check-label { font-size: 12px; color: #666; display: flex; align-items: center; gap: 4px; }

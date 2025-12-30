@@ -74,59 +74,78 @@ props.data.mode = mode
 props.data.visibility = mode === 'online' ? 'public' : 'private'
 }
 
+// 计算最终价格（人民币）
+const calculateFinalPrice = (item) => {
+    const exchangeRate = props.data.exchange_rate || 0
+    const feePerItem = props.data.calculated_fee_per_item || 0
+    const baseCNY = Math.ceil(item.price * exchangeRate + feePerItem)
+    const adjust = Number(item.adjust_price) || 0
+    return baseCNY + adjust
+}
+
 const submit = async () => {
-if (props.data.mode === 'online' && !props.data.contact.value) {
-    return alert('公开团必须填写联系方式')
-}
-
-submitting.value = true
-try {
-    const payload = {
-      name: props.data.title || '未命名团购',
-      description: '拼团数据', // 简短描述，具体数据存 JSON
-      user_id: userStore.user.id,
-      recruit_status: 'recruiting',
-      allow_external: props.data.mode === 'online',
-      image_url: props.data.items[0]?.image_url, 
-      // ✅ 核心修改：使用 Step 1 传入的父集合 ID，如果没有则为空
-      linked_item_id: props.data.linked_item_id || null, 
-      status: 'active'
+    if (props.data.mode === 'online' && !props.data.contact.value) {
+        return alert('公开团必须填写联系方式')
     }
 
-    // 1. 创建基础记录
-    const proj = await createProject(payload)
+    submitting.value = true
+    try {
+        // 1. 创建 projects 表记录
+        const payload = {
+            name: props.data.title || '未命名团购',
+            description: '拼团说明', // 简短描述
+            user_id: userStore.user.id,
+            recruit_status: 'recruiting',
+            allow_external: props.data.mode === 'online',
+            image_url: props.data.items[0]?.image_url, 
+            linked_item_id: props.data.linked_item_id || null, 
+            status: 'active',
+            // 新增字段映射
+            rules: props.data.rules || null,
+            logistics: props.data.logistics || null,
+            fees: props.data.fees || null,
+            contact: props.data.contact || null,
+            exchange_rate: props.data.exchange_rate || null
+        }
 
-    // 2. 构造完整的 JSON 数据包
-    // 🔴 关键：把 items, rules, logistics, contact 全部打包存入 description
-    const fullDataPackage = {
-        items: props.data.items,
-        rules: props.data.rules,
-        logistics: props.data.logistics,
-        contact: props.data.contact,
-        exchange_rate: props.data.exchange_rate,
-        fees: props.data.fees,
-        is_group_buy: true,
-        // 保存Step2计算的期望
-        total_pulls_plan: props.data.total_pulls_plan,
-        calculated_fee: props.data.calculated_fee_per_item
+        const proj = await createProject(payload)
+
+        // 2. 批量插入 project_items 表
+        if (props.data.items && props.data.items.length > 0) {
+            const itemsPayload = props.data.items.map(item => ({
+                project_id: proj.id,
+                name: item.name,
+                price_jpy: item.price,
+                price_cny: calculateFinalPrice(item),
+                type: item.type || 'normal',
+                is_blind_box: item.is_blind_box || false,
+                adjust_price: item.adjust_price || 0,
+                self_keep: item.self_keep || 0,
+                image_url: item.image_url || null
+            }))
+
+            const { error: itemsError } = await supabase
+                .from('project_items')
+                .insert(itemsPayload)
+
+            if (itemsError) {
+                // 如果插入失败，尝试删除已创建的 project 记录（可选）
+                await supabase.from('projects').delete().eq('id', proj.id)
+                throw new Error('商品明细插入失败: ' + itemsError.message)
+            }
+        }
+
+        alert('🎉 开团成功！')
+        
+        // 路由跳转：去新的拼团详情页
+        router.push(`/group-buy/${proj.id}`)
+
+    } catch (e) {
+        console.error(e)
+        alert('发布失败: ' + e.message)
+    } finally {
+        submitting.value = false
     }
-
-    // 3. 更新 description 为 JSON 字符串
-    await supabase.from('projects')
-        .update({ description: JSON.stringify(fullDataPackage) })
-        .eq('id', proj.id)
-
-    alert('🎉 开团成功！')
-    
-    // 🔴 路由跳转：去新的拼团详情页
-    router.push(`/group-buy/${proj.id}`)
-
-} catch (e) {
-    console.error(e)
-    alert('发布失败: ' + e.message)
-} finally {
-    submitting.value = false
-}
 }
 </script>
 

@@ -74,10 +74,10 @@ onMounted(() => {
 const loadData = async () => {
   loading.value = true
   try {
-    // 1. 查 projects
+    // 1. 查 projects 表（修正：改为查询 projects 表）
     let query = supabase
       .from('projects')
-      .select('*')
+      .select('id, name, status, image_url, description, created_at, user_id')
       .eq('status', 'active')
       .order('created_at', { ascending: false })
 
@@ -86,17 +86,31 @@ const loadData = async () => {
     }
 
     const { data, error } = await query
-    if (error) throw error
+    if (error) {
+      console.error('查询 projects 错误:', error)
+      throw error
+    }
 
-    // 2. 解析 JSON 并收集 userIds
+    // 2. 解析 JSON 并收集 userIds（增强容错性）
     const userIds = new Set()
-    const parsedList = data.map(p => {
+    const parsedList = (data || []).map(p => {
       let details = {}
       try {
-        if (typeof p.description === 'string' && p.description.startsWith('{')) {
-          details = JSON.parse(p.description)
+        // 增强 JSON 解析的容错性：如果 description 是 null 或格式错误，给予默认空对象
+        if (p.description) {
+          if (typeof p.description === 'string') {
+            if (p.description.trim().startsWith('{')) {
+              details = JSON.parse(p.description)
+            }
+          } else if (typeof p.description === 'object') {
+            // 如果已经是对象，直接使用
+            details = p.description
+          }
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn(`项目 ID ${p.id} 的 description 解析失败:`, e)
+        details = {} // 默认空对象，防止页面白屏
+      }
       
       if (p.user_id) userIds.add(p.user_id)
 
@@ -111,7 +125,7 @@ const loadData = async () => {
     if (userIds.size > 0) {
       const { data: users, error: uError } = await supabase
         .from('profiles')
-        .select('id, username') // 👈 这里改成了 username
+        .select('id, username')
         .in('id', Array.from(userIds))
       
       if (!uError && users) {
@@ -124,11 +138,14 @@ const loadData = async () => {
       }
     }
 
-    // 4. 过滤拼团
-    list.value = parsedList.filter(p => p.parsedDetails?.is_group_buy)
+    // 4. 过滤拼团（如果 parsedDetails 中有 is_group_buy 字段）
+    list.value = parsedList.filter(p => {
+      // 如果没有 is_group_buy 字段，默认显示所有 active 状态的项目
+      return p.parsedDetails?.is_group_buy !== false
+    })
 
   } catch (e) {
-    console.error(e)
+    console.error('loadData 错误:', e)
   } finally {
     loading.value = false
   }
